@@ -727,8 +727,14 @@
         </button>
       </div>
       <form @submit.prevent="act(submitDraft)">
-        <template v-if="modal === 'character'"
-          ><label
+        <template v-if="modal === 'character'">
+          <label
+            >프로필 이미지<input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              @change="file = $event.target.files[0]"
+          /></label>
+          <label
             >이름<input
               v-model="draft.name"
               class="form-input"
@@ -756,11 +762,6 @@
               class="form-textarea"
               placeholder='{"습관":"자주 창밖을 본다"}'
             ></textarea></label
-          ><label
-            >프로필 이미지<input
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              @change="file = $event.target.files[0]" /></label
         ></template>
         <template v-if="modal === 'relationship'"
           ><label

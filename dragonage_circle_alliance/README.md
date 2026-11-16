@@ -9,7 +9,7 @@ Vue 3 / Vue Router / Cytoscape.js + Cloudflare Pages / Workers / D1 / 비공개 
 
 ## 실행
 
-Node.js 22 이상에서 `npm install` 후 `npm run db:local`, `npm run worker:dev`, 다른 터미널에서 `npm run serve`.
+Node.js 22 이상에서 `npm install` 후 `npm run db:local`, `y`, 다른 터미널에서 `npm run serve`.
 사이트: http://localhost:8090 / API: http://localhost:8787.
 Google 로그인은 `.dev.vars.example`을 `worker/.dev.vars`로 복사하고 Google OAuth 설정을 마쳐야 합니다.
 빈 DB에서 첫 관리자는 `BOOTSTRAP_ADMIN_EMAIL`에 지정한 Google 계정으로 로그인할 때 생성됩니다.
