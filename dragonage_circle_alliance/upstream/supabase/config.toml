@@ -1,0 +1,18 @@
+[functions.player-login]
+verify_jwt = false
+
+[functions.new-post-push]
+verify_jwt = false
+
+[functions.campaign-push]
+verify_jwt = false
+
+[functions.discord-notices]
+verify_jwt = false
+
+[functions.discord-posts]
+verify_jwt = false
+
+# Private database worker: validates a time-limited HMAC inside the function.
+[functions.google-backup]
+verify_jwt = false

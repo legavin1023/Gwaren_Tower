@@ -1,0 +1,6 @@
+import {mkdir,writeFile} from 'node:fs/promises';import path from 'node:path';import {api,sha,verifyBackup} from './backup-lib.mjs';
+const directory=process.env.BACKUP_DIR||path.join('backups',new Date().toISOString().replace(/[:.]/g,'-'));await mkdir(directory,{recursive:true});
+const snapshot=await (await api('/backup/snapshot',process.env.BACKUP_TOKEN)).json();if(snapshot.format!=='circle-cloudflare-v1')throw Error('Invalid snapshot');const raw=Buffer.from(JSON.stringify(snapshot,null,2));await writeFile(path.join(directory,'snapshot.json'),raw,{flag:'wx'});
+const manifest={format:'circle-backup-files-v1',complete:false,snapshot_sha256:sha(raw),files:[]};
+for(const u of snapshot.tables.uploads){const bytes=Buffer.from(await (await api('/backup/file/'+encodeURIComponent(u.path),process.env.BACKUP_TOKEN)).arrayBuffer());if(sha(bytes)!==u.sha256||bytes.length!==u.bytes)throw Error('Image integrity failure');const file=u.path.replaceAll('/','__');await writeFile(path.join(directory,file),bytes,{flag:'wx'});manifest.files.push({path:u.path,file,sha256:u.sha256,bytes:u.bytes,mime:u.mime});}
+manifest.complete=true;await writeFile(path.join(directory,'manifest.json'),JSON.stringify(manifest,null,2));await verifyBackup(directory);console.log('Verified DB and images:',directory);

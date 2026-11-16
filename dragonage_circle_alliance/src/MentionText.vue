@@ -1,0 +1,2 @@
+<template><span class="prose"><template v-for="(part,i) in parts" :key="i"><router-link v-if="part.id" :to="'/characters/'+part.id">@{{part.text}}</router-link><template v-else>{{part.text}}</template></template></span></template>
+<script setup>import {computed} from 'vue';import {mentionParts} from './domain.mjs';const props=defineProps({text:String,characters:Array});const parts=computed(()=>mentionParts(props.text,props.characters||[]));</script>

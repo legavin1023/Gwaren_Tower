@@ -1,0 +1,13 @@
+name = "dragonage-circle-api"
+main = "index.mjs"
+compatibility_date = "2026-11-16"
+[vars]
+SITE_ORIGIN = "http://localhost:8090"
+[[d1_databases]]
+binding = "DB"
+database_name = "circle-alliance"
+database_id = "REPLACE_WITH_NEW_D1_DATABASE_ID"
+migrations_dir = "../migrations"
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "dragonage-circle-private"
