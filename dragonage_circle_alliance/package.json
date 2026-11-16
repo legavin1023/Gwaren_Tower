@@ -10,7 +10,7 @@
     "restore": "node scripts/restore.mjs",
     "worker:dev": "wrangler dev --config worker/wrangler.toml",
     "worker:deploy": "wrangler deploy --config worker/wrangler.toml",
-    "pages:deploy": "wrangler pages deploy dist --project-name dragonage-circle-alliance",
+    "pages:deploy": "wrangler pages deploy dist --project-name gwaren-tower",
     "db:local": "wrangler d1 migrations apply circle-alliance --local --config worker/wrangler.toml",
     "db:remote": "wrangler d1 migrations apply circle-alliance --remote --config worker/wrangler.toml"
   },

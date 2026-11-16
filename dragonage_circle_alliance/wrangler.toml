@@ -1,4 +1,4 @@
-name = "dragonage-circle-alliance"
+name = "gwaren-tower"
 pages_build_output_dir = "dist"
 compatibility_date = "2026-11-16"
 [[services]]

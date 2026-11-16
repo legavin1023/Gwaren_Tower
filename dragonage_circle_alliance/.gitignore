@@ -19,3 +19,5 @@ worker-dist/
 # Exported data, images and logs
 backups/
 *.log
+드에 자캐동맹.json
+client_secret*.json

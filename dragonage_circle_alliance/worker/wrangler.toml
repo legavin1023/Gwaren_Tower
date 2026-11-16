@@ -2,7 +2,7 @@ name = "dragonage-circle-api"
 main = "index.mjs"
 compatibility_date = "2026-11-16"
 [vars]
-SITE_ORIGIN = "http://localhost:8090"
+SITE_ORIGIN = "https://gwaren-tower.pages.dev"
 [[d1_databases]]
 binding = "DB"
 database_name = "circle-alliance"
