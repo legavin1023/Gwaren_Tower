@@ -192,22 +192,17 @@
             </section>
             <div class="profile-columns">
               <section class="card">
-                <h3>기본 설정</h3>
-                <dl class="detail-grid">
-                  <template v-for="f in shortFields" :key="f.key"
-                    ><dt>{{ f.label }}</dt>
-                    <dd>{{ character[f.key] || "미입력" }}</dd></template
-                  >
-                </dl>
-                <template v-for="f in longFields" :key="f.key"
-                  ><h4>{{ f.label }}</h4>
-                  <p class="prose">
-                    {{ character[f.key] || "아직 기록되지 않았습니다." }}
-                  </p></template
-                ><template v-for="(value, key) in character.extra" :key="key"
-                  ><h4>{{ key }}</h4>
-                  <p class="prose">{{ value }}</p></template
-                >
+                <h3>캐릭터 프로필</h3>
+                <template v-for="f in profileFields" :key="f.key">
+                  <h4>{{ f.label }}</h4><p class="prose">{{ fieldValue(character, f) || '아직 기록되지 않았습니다.' }}</p>
+                </template>
+                <h3>오너용 추가 설정</h3>
+                <template v-for="f in ownerFields" :key="f.key">
+                  <h4>{{ f.label }}</h4><p class="prose">{{ character[f.key] || '아직 기록되지 않았습니다.' }}</p>
+                </template>
+                <template v-for="(value, key) in character.extra" :key="key">
+                  <template v-if="!extraFields.some(f => f.key === key)"><h4>{{ key }}</h4><p class="prose">{{ value }}</p></template>
+                </template>
               </section>
               <section class="card">
                 <h3>♥ 호감도</h3>
@@ -280,6 +275,10 @@
                   ><b>{{ r.name }}</b
                   ><span class="badge">{{ statusLabel(r.status) }}</span>
                   <p class="prose">{{ r.description }}</p>
+                  <div v-if="r.status === 'pending' && ownsId(r.target_id)" class="toolbar">
+                    <button class="primary-button" :disabled="busy" @click="act(() => updateStatus(r, 'approved'))">관계 수락</button>
+                    <button class="secondary-button" :disabled="busy" @click="act(() => updateStatus(r, 'rejected'))">거절</button>
+                  </div>
                 </article>
                 <h3>이미지 갤러리</h3>
                 <button
@@ -427,7 +426,7 @@
                   :disabled="busy"
                   @click="act(() => updateStatus(r, 'approved'))"
                 >
-                  승인</button
+                  관계 수락</button
                 ><button
                   class="secondary-button"
                   :disabled="busy"
@@ -713,7 +712,7 @@
       </main>
     </div>
   </div>
-  <div v-if="modal" class="modal-overlay" @click.self="modal = ''">
+  <div v-if="modal" class="modal-overlay">
     <section
       class="modal editor"
       role="dialog"
@@ -722,11 +721,11 @@
     >
       <div class="modal-head">
         <h2>{{ modalTitle }}</h2>
-        <button class="secondary-button" @click="modal = ''" aria-label="닫기">
+        <button class="secondary-button" :disabled="busy" @click="modal = ''" aria-label="닫기">
           ×
         </button>
       </div>
-      <form @submit.prevent="act(submitDraft)">
+      <form @submit.prevent="act(submitDraft)"><fieldset :disabled="busy" class="editor-fields">
         <template v-if="modal === 'character'">
           <label
             >프로필 이미지<input
@@ -734,35 +733,24 @@
               accept="image/png,image/jpeg,image/webp,image/gif"
               @change="file = $event.target.files[0]"
           /></label>
-          <label
-            >이름<input
-              v-model="draft.name"
-              class="form-input"
-              required
-              maxlength="120" /></label
-          ><label>별명<input v-model="draft.alias" class="form-input" /></label
-          ><label
-            >진영<select v-model="draft.faction" class="form-input">
-              <option value="mage">마법사</option>
-              <option value="templar">템플러</option>
-            </select></label
-          ><label v-for="f in shortFields" :key="f.key"
-            >{{ f.label
-            }}<input v-model="draft[f.key]" class="form-input" /></label
-          ><label v-for="f in longFields" :key="f.key"
-            >{{ f.label
-            }}<textarea
-              v-model="draft[f.key]"
-              class="form-textarea"
-              rows="4"
-            ></textarea></label
-          ><label
-            >자유 설정 항목 (JSON)<textarea
-              v-model="extraText"
-              class="form-textarea"
-              placeholder='{"습관":"자주 창밖을 본다"}'
-            ></textarea></label
-        ></template>
+          <label v-for="f in profileFields" :key="f.key">{{ f.label }}
+            <select v-if="f.options" :value="fieldValue(draft, f)" @change="setField(f, $event.target.value)" class="form-input">
+              <option value="">선택</option><option v-for="option in f.options" :key="option">{{ option }}</option>
+              <option v-if="fieldValue(draft, f) && !f.options.includes(fieldValue(draft, f))" :value="fieldValue(draft, f)">{{ fieldValue(draft, f) }} (기존 입력)</option>
+            </select>
+            <textarea v-else-if="f.long" :value="fieldValue(draft, f)" @input="setField(f, $event.target.value)" class="form-textarea" rows="4"></textarea>
+            <input v-else :value="fieldValue(draft, f)" @input="setField(f, $event.target.value)" class="form-input" :required="f.key === 'name'" :maxlength="f.key === 'name' ? 120 : undefined" />
+          </label>
+          <h3>오너용 추가 설정</h3>
+          <p class="muted">캐릭터의 보충 설정입니다. 비밀 설정도 로그인한 오너들에게 공유됩니다.</p>
+          <label>별명<input v-model="draft.alias" class="form-input" /></label>
+          <label>계열<select v-model="draft.faction" class="form-input"><option value="mage">마법사</option><option value="templar">템플러</option></select></label>
+          <label v-for="f in ownerFields" :key="f.key">{{ f.label }}
+            <textarea v-if="f.long" v-model="draft[f.key]" class="form-textarea" rows="4"></textarea>
+            <input v-else v-model="draft[f.key]" class="form-input" />
+          </label>
+          <p class="muted">프로필 이미지도 WebP로 압축합니다. GIF는 정지 이미지로 변환됩니다.</p>
+        </template>
         <template v-if="modal === 'relationship'"
           ><label
             >내 캐릭터<select
@@ -862,15 +850,15 @@
               rows="10"
             ></textarea></label
           ><label
-            >연결할 캐릭터<select
-              v-model="draft.character_ids"
-              multiple
-              class="form-input"
-            >
-              <option v-for="c in characters" :key="c.id" :value="c.id">
-                {{ c.name }}
-              </option>
-            </select></label
+            >태그할 캐릭터 (여러 명 선택 가능)</label>
+            <div class="character-tags" role="group" aria-label="태그할 캐릭터">
+              <label v-for="c in characters" :key="c.id"><input type="checkbox" v-model="draft.character_ids" :value="c.id" /> {{ c.name }} <small>· {{ owner(c.owner_id) }}</small></label>
+            </div>
+            <label v-if="draft.category === 'art'">이미지 첨부 (여러 장 가능)
+              <input type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" @change="selectPostImages" />
+            </label>
+            <p v-if="draft.category === 'art'" class="muted">이미지는 WebP로 압축하여 저장합니다. GIF는 첫 프레임의 정지 이미지로 변환됩니다.</p>
+            <ul v-if="postFiles.length"><li v-for="(attachment, index) in postFiles" :key="index">{{ attachment.name }} <button type="button" :disabled="busy" @click="postFiles.splice(index, 1)">첨부 제외</button></li></ul
           ></template
         >
         <template v-if="modal === 'media'"
@@ -898,11 +886,11 @@
         <div class="toolbar">
           <button class="primary-button" :disabled="busy">
             {{ busy ? "저장 중…" : "저장" }}</button
-          ><button type="button" class="secondary-button" @click="modal = ''">
-            취소
+          ><button type="button" class="secondary-button" :disabled="busy" @click="modal = ''">
+            × 닫기
           </button>
         </div>
-      </form>
+      </fieldset></form>
     </section>
   </div>
   <div v-if="deleteTarget" class="modal-overlay">
@@ -964,7 +952,7 @@ const busy = ref(false),
   modal = ref(""),
   draft = ref({}),
   file = ref(null),
-  extraText = ref("{}"),
+  postFiles = ref([]),
   deleteTarget = ref(null),
   search = ref(""),
   faction = ref(""),
@@ -990,19 +978,38 @@ const navigation = [
   { path: "/board/notice", icon: "▣", label: "공지" },
   { path: "/profile", icon: "○", label: "내 프로필" },
 ];
-const shortFields = [
+const races = ["인간", "엘프", "드워프", "쿠나리"];
+const extraFields = [
+  { key: "quote", label: "한 마디" },
+  { key: "affiliation", label: "소속" },
+  { key: "circle_faction", label: "파벌", options: ["마탑 수호파", "중립", "자유파"] },
+  { key: "motivation", label: "마탑에 들어온 동기 / 결핍·콤플렉스" },
+  { key: "appearance", label: "외관" },
+  { key: "other", label: "기타 설정" },
+  { key: "relationship_direction", label: "희망하는 자관 방향" },
+];
+const profileFields = [
+  { key: "quote", label: "한 마디", extra: true },
+  { key: "name", label: "이름" },
+  { key: "affiliation", label: "소속", extra: true },
+  { key: "race", label: "종족", options: races },
+  { ...extraFields.find(f => f.key === 'circle_faction'), extra: true },
+  { ...extraFields.find(f => f.key === 'motivation'), extra: true, long: true },
+  { ...extraFields.find(f => f.key === 'appearance'), extra: true, long: true },
+  { key: "personality", label: "성격 · 키워드 서술", long: true },
+  { key: "other", label: "기타 설정", extra: true, long: true },
+  { key: "secrets", label: "비밀 설정 (캐릭터에게 비밀 · 오너끼리는 공유)", long: true },
+  { ...extraFields.find(f => f.key === 'relationship_direction'), extra: true, long: true },
+];
+const ownerFields = [
   { key: "age", label: "나이" },
-  { key: "gender", label: "성별" },
-  { key: "race", label: "종족" },
-  { key: "origin", label: "출신지" },
   { key: "position", label: "직책·마탑 내 역할" },
+  { key: "origin", label: "출신지" },
+  { key: "background", label: "배경 이야기", long: true },
+  { key: "goals", label: "목표와 가치관", long: true },
 ];
-const longFields = [
-  { key: "personality", label: "성격" },
-  { key: "background", label: "배경 이야기" },
-  { key: "goals", label: "목표와 가치관" },
-  { key: "secrets", label: "비밀 설정" },
-];
+function fieldValue(row, field) { return field.extra ? row.extra?.[field.key] || '' : row[field.key] || ''; }
+function setField(field, value) { if (field.extra) draft.value.extra[field.key] = value; else draft.value[field.key] = value; }
 const admin = computed(() => me.value?.role === "admin"),
   mine = computed(() =>
     characters.value.filter((c) => c.owner_id === me.value?.id),
@@ -1157,7 +1164,7 @@ function editCharacter(c) {
   draft.value = c
     ? { ...c }
     : { name: "", alias: "", faction: "mage", extra: {} };
-  extraText.value = JSON.stringify(c?.extra || {}, null, 2);
+  draft.value.extra = { ...(c?.extra || {}) };
   file.value = null;
   error.value = "";
   modal.value = "character";
@@ -1186,6 +1193,8 @@ function editPost(p) {
         character_id: null,
         character_ids: [],
       };
+  file.value = null;
+  postFiles.value = [];
   modal.value = "post";
   error.value = "";
 }
@@ -1199,6 +1208,10 @@ function openMedia(characterId = "", postId = "") {
   modal.value = "media";
   error.value = "";
 }
+function selectPostImages(event) {
+  postFiles.value.push(...Array.from(event.target.files || []).map(file => ({ file, name: file.name })));
+  event.target.value = "";
+}
 async function submitDraft() {
   let table = {
     character: "characters",
@@ -1208,13 +1221,7 @@ async function submitDraft() {
   }[modal.value];
   const value = { ...draft.value };
   if (modal.value === "character") {
-    value.extra = JSON.parse(extraText.value);
-    if (
-      !value.extra ||
-      Array.isArray(value.extra) ||
-      typeof value.extra !== "object"
-    )
-      throw new Error("자유 설정은 JSON 객체로 입력하세요.");
+    value.extra = { ...draft.value.extra };
     if (file.value) value.image_path = await upload(file.value);
   }
   if (modal.value === "media") {
@@ -1224,6 +1231,15 @@ async function submitDraft() {
     value.mime = file.value.type;
   }
   const saved = await save(table, value);
+  if (table === "posts") {
+    draft.value = { ...saved, character_ids: [...saved.character_ids] };
+    while (postFiles.value.length) {
+      const attachment = postFiles.value[0];
+      attachment.path ||= await upload(attachment.file);
+      await save("media", { post_id: saved.id, path: attachment.path, caption: attachment.name });
+      postFiles.value.shift();
+    }
+  }
   modal.value = "";
   await refresh();
   if (table === "characters") router.push("/characters/" + saved.id);

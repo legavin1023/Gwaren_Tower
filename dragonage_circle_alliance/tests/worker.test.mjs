@@ -26,9 +26,11 @@ test('real SQLite: invite gate, ownership, directional affection, approval, comm
  const c=(await call(env,'/comments','two','POST',{target_id:a.id,character_id:b.id,body:'안녕하세요'})).data;assert.equal(c.character_id,b.id);
  assert.equal((await call(env,'/comments','one','POST',{target_id:a.id,character_id:b.id,body:'대리 작성'})).status,403);
  assert.equal((await call(env,'/posts','one','POST',{title:'공지 위장',category:'notice'})).status,403);
- const p=(await call(env,'/posts','one','POST',{title:'이야기',category:'story',character_id:a.id,character_ids:[b.id]})).data;
+ assert.equal((await call(env,'/upload','one','POST',new Uint8Array([137,80,78,71]),{'Content-Type':'image/png'})).status,400);
+ const p=(await call(env,'/posts','one','POST',{title:'이야기',category:'story',character_id:a.id,character_ids:[a.id,b.id]})).data;
+ assert.deepEqual(p.character_ids,[a.id,b.id]);
  assert.equal((await call(env,'/comments','two','POST',{post_id:p.id,parent_id:c.id,body:'다른 위치 답글'})).status,400);
- const bytes=Uint8Array.from([137,80,78,71,13,10,26,10,0]);const upload=(await call(env,'/upload','one','POST',bytes,{'Content-Type':'image/png'})).data;
+ const bytes=new TextEncoder().encode('RIFF0000WEBPVP8 test');const upload=(await call(env,'/upload','one','POST',bytes,{'Content-Type':'image/webp'})).data;
  assert.equal((await call(env,'/files/'+encodeURIComponent(upload.path),null)).status,401);
  assert.equal((await call(env,'/files/'+encodeURIComponent(upload.path),'two')).status,200);
  assert.equal((await call(env,'/media','two','POST',{path:upload.path})).status,403);
@@ -44,14 +46,14 @@ test('real SQLite: invite gate, ownership, directional affection, approval, comm
 });
 test('snapshot + R2 restore roundtrip, read-only backup key and rollback on invalid DB',async()=>{
  const env=await fixture(),fresh=await fixture();try{
- const a=(await call(env,'/characters','one','POST',{name:'보존된 캐릭터',faction:'mage',secrets:'비밀',extra:{습관:'독서'}})).data;
- const bytes=Uint8Array.from([137,80,78,71,13,10,26,10,0]);const file=(await call(env,'/upload','one','POST',bytes,{'Content-Type':'image/png'})).data;
+ const a=(await call(env,'/characters','one','POST',{name:'보존된 캐릭터',faction:'mage',secrets:'비밀',extra:{습관:'독서',circle_faction:'중립',quote:'한 마디',other:'기타 설정',relationship_direction:'동료'}})).data;
+ const bytes=new TextEncoder().encode('RIFF0000WEBPVP8 test');const file=(await call(env,'/upload','one','POST',bytes,{'Content-Type':'image/webp'})).data;
  await call(env,'/media','one','POST',{path:file.path,character_id:a.id});
  await call(env,'/backup/status',null,'POST',{status:'complete',details:'previous backup'},{Authorization:'Bearer backup-test'});
  const backup=(await call(env,'/backup/snapshot',null,'GET',undefined,{Authorization:'Bearer backup-test'})).data;
  assert.equal(backup.tables.backup_runs.length,1);
  assert.equal((await call(fresh,'/backup/restore',null,'POST',backup,{Authorization:'Bearer backup-test'})).status,403);
- assert.equal((await call(fresh,'/backup/restore-file',null,'POST',bytes,{Authorization:'Bearer restore-test','Content-Type':'image/png','X-Object-Key':file.path,'X-Sha256':digest(bytes)})).status,200);
+ assert.equal((await call(fresh,'/backup/restore-file',null,'POST',bytes,{Authorization:'Bearer restore-test','Content-Type':'image/webp','X-Object-Key':file.path,'X-Sha256':digest(bytes)})).status,200);
  assert.equal((await call(fresh,'/backup/restore',null,'POST',backup,{Authorization:'Bearer restore-test'})).status,200);
  assert.equal((await fresh.DB.prepare('SELECT count(*) n FROM backup_runs').first()).n,1);assert.equal((await fresh.DB.prepare('SELECT secrets FROM characters WHERE id=?').bind(a.id).first()).secrets,'비밀');assert.equal((await fresh.DB.prepare('SELECT count(*) n FROM sessions').first()).n,0);
  const broken=structuredClone(backup);broken.tables.characters[0].name='변경되면 안 됨';broken.tables.media[0].owner_id='missing';assert.equal((await call(fresh,'/backup/restore',null,'POST',broken,{Authorization:'Bearer restore-test'})).status,400);assert.equal((await fresh.DB.prepare('SELECT name FROM characters WHERE id=?').bind(a.id).first()).name,'보존된 캐릭터');
