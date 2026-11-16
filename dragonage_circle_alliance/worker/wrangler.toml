@@ -6,7 +6,7 @@ SITE_ORIGIN = "http://localhost:8090"
 [[d1_databases]]
 binding = "DB"
 database_name = "circle-alliance"
-database_id = "REPLACE_WITH_NEW_D1_DATABASE_ID"
+database_id = "7c01c612-6bcd-47db-b392-e8b3117da170"
 migrations_dir = "../migrations"
 [[r2_buckets]]
 binding = "MEDIA"
