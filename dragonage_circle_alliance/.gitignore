@@ -1,11 +1,21 @@
+# Dependencies and build output
 node_modules/
 dist/
+worker-dist/
+
+# Local environment files and secrets (all environments)
 .env*
-.dev.vars
+.dev.vars*
+*.local.env
+
+# Empty configuration templates may be committed
+!.env.example
+!.dev.vars.example
+
+# Local Cloudflare/Vercel state and database files
 .wrangler/
+.vercel/
+
+# Exported data, images and logs
 backups/
 *.log
-
-worker-dist/
-worker/.dev.vars
-worker/.wrangler/
