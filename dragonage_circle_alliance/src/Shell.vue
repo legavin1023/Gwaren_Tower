@@ -2,7 +2,7 @@
   <div v-if="!me" class="login-wrap">
     <section class="card login-card">
       <span class="eyebrow">DRAGON AGE · PRIVATE CIRCLE</span>
-      <h1>마탑의 기록</h1>
+      <h1>Gwaren Tower</h1>
       <p>마법사와 템플러, 그 사이의 이야기.</p>
       <p class="muted">
         활동 의무 없이, 서로의 캐릭터와 이야기를 나누는 작은 공간입니다. 등록된
@@ -22,7 +22,7 @@
     <aside class="sidebar">
       <div class="brand">
         <span class="brand-mark">DA</span
-        ><span><b>Gwaren Tower</b><small>마탑의 기록</small></span>
+        ><span><b>Gwaren Tower</b><small>자캐 동맹</small></span>
       </div>
       <nav class="side-nav" aria-label="주요 메뉴">
         <router-link
@@ -1053,7 +1053,7 @@ const admin = computed(() => me.value?.role === "admin"),
   pageTitle = computed(
     () =>
       navigation.find((i) => route.path.startsWith(i.path))?.label ||
-      (route.path === "/admin" ? "운영 관리" : "마탑의 기록"),
+      (route.path === "/admin" ? "운영 관리" : "Gwaren Tower"),
   ),
   modalTitle = computed(
     () =>

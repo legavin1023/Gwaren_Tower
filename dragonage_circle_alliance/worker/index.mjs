@@ -90,7 +90,7 @@ async function saveRecord(env,me,table,input,restore=false){
  if(!changes[0].meta.changes)fail('다른 요청과 충돌했습니다. 새로고침하세요.',409);return row;
 }
 async function snapshot(env){
- const names=[...tables,'uploads','history'];const results=await env.DB.batch(names.map(t=>env.DB.prepare('SELECT * FROM '+t+' ORDER BY created_at,'+(t==='uploads'?'path':'id'))));return {format:'circle-cloudflare-v1',exported_at:now(),tables:Object.fromEntries(names.map((t,i)=>[t,results[i].results]))};
+ const names=[...tables,'uploads','history','backup_runs'];const results=await env.DB.batch(names.map(t=>env.DB.prepare('SELECT * FROM '+t+' ORDER BY created_at,'+(t==='uploads'?'path':'id'))));return {format:'circle-cloudflare-v1',exported_at:now(),tables:Object.fromEntries(names.map((t,i)=>[t,results[i].results]))};
 }
 async function backupAuthorized(req,env,restore=false){const expected=restore?env.RESTORE_TOKEN:env.BACKUP_TOKEN;if(!expected||!req.headers.get('Authorization')||await hash(req.headers.get('Authorization'))!==await hash('Bearer '+expected))fail('백업 인증에 실패했습니다.',403);}
 async function backupRoute(req,env,path){
@@ -102,7 +102,7 @@ async function backupRoute(req,env,path){
  }
  if(path==='/backup/restore'&&req.method==='POST'){
   await backupAuthorized(req,env,true);const b=await req.json();if(b.format!=='circle-cloudflare-v1')fail('잘못된 백업 형식');
-  const names=[...tables,'uploads','history'];for(const t of names)if(!Array.isArray(b.tables?.[t]))fail('불완전한 백업: '+t);
+  const names=[...tables,'uploads','history',...(Array.isArray(b.tables?.backup_runs)?['backup_runs']:[])];for(const t of names)if(!Array.isArray(b.tables?.[t]))fail('불완전한 백업: '+t);
   for(const u of b.tables.uploads){const obj=await env.MEDIA.head(u.path);if(!obj||obj.size!==u.bytes)fail('이미지 원본을 먼저 복구하세요: '+u.path);}
   const statements=[env.DB.prepare('PRAGMA defer_foreign_keys=ON')];
   for(const t of names){const schema=await env.DB.prepare('PRAGMA table_info('+t+')').all();const allowed=new Set(schema.results.map(c=>c.name));for(const row of b.tables[t]){const keys=Object.keys(row);if(!keys.length||keys.some(k=>!allowed.has(k)))fail('잘못된 백업 필드');statements.push(env.DB.prepare(`INSERT INTO ${t} (${keys.join(',')}) VALUES (${keys.map(()=>'?').join(',')}) ON CONFLICT(${t==='uploads'?'path':'id'}) DO UPDATE SET ${keys.map(k=>`${k}=excluded.${k}`).join(',')}`).bind(...keys.map(k=>row[k])));}}

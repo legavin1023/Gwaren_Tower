@@ -1,4 +1,4 @@
-# 마탑의 기록 · Dragon Age Circle Alliance
+# Gwaren Tower · Dragon Age Circle Alliance
 
 기존 GM 아카이빙 사이트를 보존하면서 별도 폴더에 만든 비공개 캐릭터 동맹입니다.
 Vue 3 / Vue Router / Cytoscape.js + Cloudflare Pages / Workers / D1 / 비공개 R2를 사용합니다.
