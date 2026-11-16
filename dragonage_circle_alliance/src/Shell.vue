@@ -4,10 +4,7 @@
       <span class="eyebrow">DRAGON AGE · PRIVATE CIRCLE</span>
       <h1>Gwaren Tower</h1>
       <p>마법사와 템플러, 그 사이의 이야기.</p>
-      <p class="muted">
-        활동 의무 없이, 서로의 캐릭터와 이야기를 나누는 작은 공간입니다. 등록된
-        Google 계정으로 들어오세요.
-      </p>
+      <p class="muted">서로의 캐릭터와 이야기를 나누는 작은 공간입니다.</p>
       <a href="/api/auth/login" class="primary-button login-link"
         >Google 계정으로 입장</a
       >
