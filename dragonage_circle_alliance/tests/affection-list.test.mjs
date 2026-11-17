@@ -12,7 +12,7 @@ test('affection list keeps directional and zero scores, filters owned endpoints,
  try{
   for(const [name,sourceName] of [['portrait-'+process.pid,'Portrait'],['affection-'+process.pid,'AffectionList']]){
    const {descriptor}=parse(await readFile(new URL('../src/'+sourceName+'.vue',import.meta.url),'utf8'));
-   const code=compileScript(descriptor,{id:name,inlineTemplate:true}).content.replace("'./Portrait.vue'","'./portrait-"+process.pid+".mjs'");
+   const code=compileScript(descriptor,{id:name,inlineTemplate:true}).content.replaceAll("'./character-theme.mjs'","'../../src/character-theme.mjs'").replace("'./Portrait.vue'","'./portrait-"+process.pid+".mjs'");
    const file=new URL(name+'.mjs',folder);await writeFile(file,code);files.push(file);
   }
   const List=(await import(files[1].href)).default,characters=[{id:'a',name:'에이라',owner_id:'me'},{id:'b',name:'네리스',owner_id:'other'},{id:'c',name:'로웬',owner_id:'me'}];

@@ -2,7 +2,7 @@
   <div class="notification-center">
     <button class="secondary-button" :aria-expanded="open" aria-controls="notification-panel" aria-label="알림" title="알림" @click="toggle"><span aria-hidden="true">🔔</span><span class="notification-trigger-label">알림</span> <span v-if="unread" class="notification-count">{{ unread > 99 ? '99+' : unread }}</span></button>
     <section v-if="open" id="notification-panel" class="notification-panel" role="dialog" aria-label="알림 목록">
-      <header class="modal-head"><h3>알림</h3><button class="secondary-button" aria-label="알림 닫기" @click="open=false">×</button></header>
+      <header class="modal-head"><h3>알림</h3><small class="notification-connection">{{ connectionLabel }}</small><button class="secondary-button" aria-label="알림 닫기" @click="open=false">×</button></header>
       <p v-if="error" class="error" role="alert">{{ error }}</p>
       <p v-if="message" class="success" role="status">{{ message }}</p>
       <details class="push-settings">
@@ -29,16 +29,22 @@ import {ref,computed,onMounted,onBeforeUnmount,watch} from 'vue';
 import {useRouter} from 'vue-router';
 import {request} from './api';
 import {defaultPreferences,environmentMessage,currentPushState,enablePush,disablePush,savePushPreferences} from './push.mjs';
-const props=defineProps({version:Number});
+const props=defineProps({version:Number,status:{type:String,default:'connecting'}});
+const connectionLabel=computed(()=>({live:'실시간 연결됨',connecting:'연결 중',reconnecting:'재연결 중',offline:'오프라인',unavailable:'연결을 지원하지 않는 환경',unauthorized:'로그인 필요'}[props.status]||''));
 const router=useRouter(),open=ref(false),items=ref([]),unread=ref(0),loading=ref(false),working=ref(false),error=ref(''),message=ref(''),filter=ref('all'),prefs=ref(defaultPreferences()),subscribed=ref(false),subscription=ref(null),config=ref({configured:false,publicKey:''});
 const environment=environmentMessage();
 const permissionDenied=ref('Notification' in window && Notification.permission==='denied');
 const settings=[{key:'new_post',label:'새 글'},{key:'new_comment',label:'새 댓글'},{key:'tag',label:'내 캐릭터가 태그됨'},{key:'own_comment',label:'내 글·캐릭터 소개의 댓글, 내 댓글의 답글'}];
 const hasSelection=computed(()=>Object.values(prefs.value).some(Boolean));
 const filtered=computed(()=>items.value.filter(item=>filter.value==='all'||item.reasons.some(reason=>['tag','own_comment'].includes(reason))));
-let timer,inflight=false,disposed=false;
+let inflight=null,queued=false,disposed=false;
 const date=value=>new Date(value).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'});
-async function load(){if(inflight)return;inflight=true;loading.value=true;try{const data=await request('/notifications');if(!disposed){items.value=data.items;unread.value=data.unread;}}catch(e){if(open.value)error.value=e.message;}finally{inflight=false;loading.value=false;}}
+async function load(){
+ if(disposed)return;
+ if(inflight){queued=true;return inflight;}
+ inflight=(async()=>{do{queued=false;loading.value=true;try{const data=await request('/notifications');if(!disposed){items.value=data.items;unread.value=data.unread;}}catch(e){if(open.value)error.value=e.message;}finally{loading.value=false;}}while(queued&&!disposed);})().finally(()=>{inflight=null;});
+ return inflight;
+}
 async function deviceState(){config.value=await request('/push/config');if(environment)return;const state=await currentPushState();subscribed.value=state.subscribed;subscription.value=state.subscription;prefs.value=state.preferences; if(state.subscribed&&config.value.configured)await savePushPreferences(state.subscription,state.preferences);}
 function toggle(){open.value=!open.value;if(open.value){error.value='';message.value='';permissionDenied.value='Notification' in window&&Notification.permission==='denied';load();deviceState().catch(e=>{error.value=e.message;});}}
 async function perform(action){if(working.value)return;working.value=true;error.value='';message.value='';try{await action();}catch(e){error.value=e.message;}finally{working.value=false;}}
@@ -47,8 +53,7 @@ function updatePreferences(){return perform(async()=>{await savePushPreferences(
 function disable(){return perform(async()=>{await disablePush();subscribed.value=false;subscription.value=null;message.value='이 기기의 알림을 해제했습니다.';});}
 function markAll(){return perform(async()=>{await request('/notifications/read',{method:'POST',body:JSON.stringify({all:true})});await load();});}
 async function visit(item){try{await request('/notifications/read',{method:'POST',body:JSON.stringify({ids:[item.id]})});if(!item.read_at){item.read_at=new Date().toISOString();unread.value=Math.max(0,unread.value-1);}open.value=false;await router.push(item.url.startsWith('#/')?item.url.slice(1):'/home');}catch(e){error.value=e.message;}}
-function visible(){if(document.visibilityState==='visible')load();}
 watch(()=>props.version,()=>load());
-onMounted(()=>{load();deviceState().catch(()=>{});timer=setInterval(visible,30000);document.addEventListener('visibilitychange',visible);});
-onBeforeUnmount(()=>{disposed=true;clearInterval(timer);document.removeEventListener('visibilitychange',visible);});
+onMounted(()=>{load();deviceState().catch(()=>{});});
+onBeforeUnmount(()=>{disposed=true;});
 </script>

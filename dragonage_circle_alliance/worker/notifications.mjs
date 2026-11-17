@@ -1,3 +1,4 @@
+import {publishRealtime,requestClient} from './realtime.mjs';
 import { buildPushPayload } from '@block65/webcrypto-web-push';
 import { fail } from './policy.mjs';
 
@@ -76,7 +77,7 @@ export async function sendNotifications(env,events,send=fetch) {
  }));
 }
 
-export async function notificationRoute(req,env,path,me,sessionHash) {
+export async function notificationRoute(req,env,path,me,sessionHash,ctx) {
  if(Number(req.headers.get('Content-Length'))>20000)fail('알림 설정 입력 크기를 초과했습니다.');
  const json=data=>new Response(JSON.stringify(data),{headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
  if(path==='/notifications'&&req.method==='GET') {
@@ -87,6 +88,7 @@ export async function notificationRoute(req,env,path,me,sessionHash) {
   const body=await req.json(),stamp=new Date().toISOString();
   if(body.all===true)await env.DB.prepare('UPDATE notifications SET read_at=? WHERE member_id=? AND read_at IS NULL').bind(stamp,me.id).run();
   else {if(!Array.isArray(body.ids)||body.ids.length>50||body.ids.some(id=>typeof id!=='string'))fail('알림을 선택하세요.');if(body.ids.length)await env.DB.prepare('UPDATE notifications SET read_at=? WHERE member_id=? AND id IN ('+body.ids.map(()=>'?').join(',')+')').bind(stamp,me.id,...body.ids).run();}
+  await publishRealtime(env,{notificationMembers:[me.id],actorMember:me.id,actorClient:requestClient(req)},ctx);
   return json({ok:true});
  }
  if(path==='/push/config'&&req.method==='GET')return json({configured:!!(env.PUSH_VAPID_PUBLIC_KEY&&env.PUSH_VAPID_PRIVATE_KEY),publicKey:env.PUSH_VAPID_PUBLIC_KEY||''});

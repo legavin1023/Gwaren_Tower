@@ -1,3 +1,5 @@
+import {publishRealtime} from './realtime.mjs';
+export {RealtimeHub} from './realtime.mjs';
 // This entry point is used only by wrangler.dev.toml, never the production worker.
 import api from './index.mjs';
 import {seedLocalDemo} from './demo-data.mjs';
@@ -27,9 +29,11 @@ export default {async fetch(req,env,ctx){
   const auth=await api.fetch(new Request(origin+'/api/me',{headers:{Cookie:req.headers.get('Cookie')||''}}),localEnv,ctx);
   if(auth.status!==200)return denied();
   const me=await auth.json();if(me.id!=='local-developer'||me.role!=='superadmin')return denied();
-  return new Response(JSON.stringify(await seedLocalDemo(env)),{headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Circle-Local-Development':'1'}});
+  const result=await seedLocalDemo(env);if(result.seeded)await publishRealtime(localEnv,{data:true,notificationMembers:['local-developer']},ctx);
+  return new Response(JSON.stringify(result),{headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Circle-Local-Development':'1'}});
  }
  const response=await api.fetch(req,localEnv,ctx);
+ if(response.status===101)return response;
  const headers=new Headers(response.headers);headers.set('X-Circle-Local-Development','1');
  return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
 }};

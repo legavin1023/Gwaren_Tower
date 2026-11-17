@@ -12,9 +12,9 @@
     <div class="affection-list">
       <article v-for="row in filtered" :key="row.id" class="card affection-record">
         <div class="affection-pair">
-          <router-link :to="'/characters/'+row.source.id" class="affection-character"><Portrait :character="row.source" /><span><strong>{{ row.source.name }}</strong><small>{{ owner(row.source.owner_id) }} · 보내는 캐릭터</small></span></router-link>
+          <router-link :to="'/characters/'+row.source.id" class="affection-character character-themed" :style="characterTheme(row.source)"><Portrait :character="row.source" /><span><strong>{{ row.source.name }}</strong><small>{{ owner(row.source.owner_id) }} · 보내는 캐릭터</small></span></router-link>
           <span v-if="!compact" class="affection-direction" aria-label="에게">→</span>
-          <router-link v-if="!compact" :to="'/characters/'+row.target.id" class="affection-character"><Portrait :character="row.target" /><span><strong>{{ row.target.name }}</strong><small>{{ owner(row.target.owner_id) }} · 받는 캐릭터</small></span></router-link>
+          <router-link v-if="!compact" :to="'/characters/'+row.target.id" class="affection-character character-themed" :style="characterTheme(row.target)"><Portrait :character="row.target" /><span><strong>{{ row.target.name }}</strong><small>{{ owner(row.target.owner_id) }} · 받는 캐릭터</small></span></router-link>
           <div class="affection-score"><strong>♥ {{ row.value }} <small>/ 100</small></strong><div class="affection-meter" role="meter" :aria-label="row.source.name+' → '+row.target.name+' 호감도'" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="row.value"><span :style="{width:row.value+'%'}"></span></div></div>
         </div>
         <p class="affection-note" :class="{muted:!row.note}">{{ row.note || '감정 설명이 없습니다.' }}</p>
@@ -27,6 +27,7 @@
 <script setup>
 import {ref,computed} from 'vue';
 import Portrait from './Portrait.vue';
+import {characterTheme} from './character-theme.mjs';
 const props=defineProps({characters:{type:Array,default:()=>[]},affection:{type:Array,default:()=>[]},members:{type:Array,default:()=>[]},me:{type:Object,required:true},targetCharacterId:{type:String,default:''},compact:Boolean});
 const scope=ref('all'),sourceId=ref(''),targetId=ref(''),sort=ref('high'),search=ref('');
 const liveCharacters=computed(()=>props.characters.filter(c=>!c.deleted_at));

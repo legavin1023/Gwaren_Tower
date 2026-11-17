@@ -42,7 +42,7 @@
           <h1 class="topbar-title">{{ pageTitle }}</h1>
         </div>
         <div class="toolbar">
-          <NotificationCenter :version="posts.length + comments.length" />
+          <NotificationCenter :version="notificationVersion" :status="liveStatus" />
           <span class="badge">{{ roleLabel(me.role) }}</span
           ><button
             class="secondary-button"
@@ -138,13 +138,13 @@
               v-for="c in filteredCharacters"
               :key="c.id"
               :to="'/characters/' + c.id"
-              class="card character-card"
+              class="card character-card character-themed" :style="characterTheme(c)"
               ><Portrait :character="c" />
               <div>
                 <span class="faction-badge" :class="c.faction">{{
                   label(c.faction)
                 }}</span>
-                <h3>{{ c.name }}</h3>
+                <h3 class="character-name">{{ c.name }}</h3>
                 <p class="muted">
                   {{ c.position || c.alias || "마탑의 일원" }}
                 </p>
@@ -159,13 +159,13 @@
         >
         <template v-else-if="route.path.startsWith('/characters/')"
           ><template v-if="character"
-            ><section class="card profile-hero">
+            ><section class="card profile-hero character-themed" :style="characterTheme(character)">
               <Portrait :character="character" />
               <div>
                 <span class="faction-badge" :class="character.faction">{{
                   label(character.faction)
                 }}</span>
-                <h2>
+                <h2 class="character-name">
                   {{ character.name }}
                   <small class="muted">{{ character.alias }}</small>
                 </h2>
@@ -202,7 +202,7 @@
                   </p>
                 </template>
                 <template v-for="(value, key) in character.extra" :key="key">
-                  <template v-if="!extraFields.some((f) => f.key === key)"
+                  <template v-if="key !== 'theme_color' && !extraFields.some((f) => f.key === key)"
                     ><h4>{{ key }}</h4>
                     <p class="prose">{{ value }}</p></template
                   >
@@ -408,11 +408,11 @@
               :key="r.id"
               class="card relation-row"
             >
-              <router-link :to="'/characters/' + r.source_id">{{
+              <router-link :to="'/characters/' + r.source_id" class="character-themed character-name" :style="characterTheme(byId(r.source_id))">{{
                 name(r.source_id)
               }}</router-link>
               {{ r.directed ? "→" : "↔" }}
-              <router-link :to="'/characters/' + r.target_id">{{
+              <router-link :to="'/characters/' + r.target_id" class="character-themed character-name" :style="characterTheme(byId(r.target_id))">{{
                 name(r.target_id)
               }}</router-link>
               <h3>{{ r.name }}</h3>
@@ -476,7 +476,7 @@
                 <template v-if="post.character_ids.length">
                   <span class="art-meta-divider" aria-hidden="true">/</span>
                   <div class="art-detail-tags" role="group" aria-label="태그한 캐릭터">
-                    <router-link v-for="id in post.character_ids" :key="id" :to="'/characters/' + id" class="badge">{{ name(id) }}</router-link>
+                    <router-link v-for="id in post.character_ids" :key="id" :to="'/characters/' + id" class="badge character-themed character-name" :style="characterTheme(byId(id))">{{ name(id) }}</router-link>
                   </div>
                 </template>
               </header>
@@ -486,7 +486,7 @@
               <p class="muted">
                 <router-link
                   v-if="post.character_id && byId(post.character_id)"
-                  :to="'/characters/' + post.character_id"
+                  :to="'/characters/' + post.character_id" class="character-themed character-name" :style="characterTheme(byId(post.character_id))"
                   >{{ name(post.character_id) }}</router-link
                 ><span v-else>{{ owner(post.owner_id) }}</span> ·
                 {{ date(post.created_at) }}
@@ -498,7 +498,7 @@
                   v-for="id in post.character_ids"
                   :key="id"
                   :to="'/characters/' + id"
-                  class="badge"
+                  class="badge character-themed character-name" :style="characterTheme(byId(id))"
                   >{{ name(id) }}</router-link
                 >
               </p>
@@ -530,7 +530,7 @@
                 (id) => (deleteTarget = { table: 'comments', id })
               " /></template
           ><template v-else-if="route.path.split('/').length === 3"
-            ><div class="section-heading board-actions">
+            ><div v-if="category !== 'art'" class="section-heading board-actions">
               <button
                 v-if="category !== 'notice' || admin"
                 class="primary-button"
@@ -539,19 +539,11 @@
                 ＋ 글 작성
               </button>
             </div>
-            <div :class="{ 'art-post-grid': category === 'art' }">
-              <template v-for="p in posts.filter(p => p.category === category).slice().reverse()" :key="p.id">
-                <article v-if="category === 'art'" class="card post-row art-post-card">
-                  <ImageSlider :items="postMedia(p.id)" :label="p.title" compact :to="'/board/' + category + '/' + p.id" />
-                  <router-link class="post-list-summary" :to="'/board/' + category + '/' + p.id">
-                    <div><h3>{{ p.title }}</h3><span class="muted">{{ name(p.character_id) || owner(p.owner_id) }} · {{ date(p.created_at) }}</span></div>
-                    <span aria-hidden="true">↗</span>
-                  </router-link>
-                </article>
-                <router-link v-else class="card post-row" :to="'/board/' + category + '/' + p.id">
-                  <div class="post-list-summary"><div><h3>{{ p.title }}</h3><span class="muted">{{ name(p.character_id) || owner(p.owner_id) }} · {{ date(p.created_at) }}</span></div><span aria-hidden="true">↗</span></div>
-                </router-link>
-              </template>
+            <LogBoard v-if="category === 'art'" :posts="posts" :media="media" :characters="characters" :members="members" @create="editPost()" />
+            <div v-else>
+              <router-link v-for="p in posts.filter(p => p.category === category).slice().reverse()" :key="p.id" class="card post-row" :to="'/board/' + category + '/' + p.id">
+                <div class="post-list-summary"><div><h3>{{ p.title }}</h3><span class="muted">{{ name(p.character_id) || owner(p.owner_id) }} · {{ date(p.created_at) }}</span></div><span aria-hidden="true">↗</span></div>
+              </router-link>
             </div>
             <p
               v-if="!posts.some((p) => p.category === category)"
@@ -616,9 +608,9 @@
                 캐릭터의 이야기와 썰을 나눕니다. 여러 캐릭터를 태그하고 댓글로
                 교류할 수 있습니다.
               </dd>
-              <dt><router-link to="/board/art">▧ 그림·로그</router-link></dt>
+              <dt><router-link to="/board/art">▧ 로그</router-link></dt>
               <dd>
-                그림과 교류 로그를 올립니다. 글마다 이미지를 최대 10장 첨부할 수
+                그림과 교류 로그를 올립니다. 글 목록·이미지 보기로 전환할 수 있으며, 글마다 이미지를 최대 10장 첨부할 수
                 있으며, 일반 이미지는 WebP로 압축하고 GIF는 원본 애니메이션을
                 유지합니다.
               </dd>
@@ -795,6 +787,7 @@
                 accept="image/png,image/jpeg,image/webp,image/gif"
                 @change="file = $event.target.files[0]"
             /></label>
+            <CharacterThemePicker v-model="draft.extra.theme_color" :name="draft.name" />
             <label v-for="f in profileFields" :key="f.key"
               >{{ f.label }}
               <select
@@ -1019,7 +1012,7 @@
               ></textarea></label
             ><label>태그할 캐릭터 (여러 명 선택 가능)</label>
             <div class="character-tags" role="group" aria-label="태그할 캐릭터">
-              <label v-for="c in characters" :key="c.id"
+              <label v-for="c in characters" :key="c.id" class="character-themed character-name" :style="characterTheme(c)"
                 ><input
                   type="checkbox"
                   v-model="draft.character_ids"
@@ -1115,9 +1108,14 @@ import {
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { request, save, remove, upload, imageBlob, exportAll } from "./api";
+import { createLiveUpdates } from "./live-updates.mjs";
+import { createImageCache } from "./image-cache.mjs";
 import Portrait from "./Portrait.vue";
+import CharacterThemePicker from "./CharacterThemePicker.vue";
+import {characterTheme} from "./character-theme.mjs";
 import AccountControls from "./AccountControls.vue";
 import ImageSlider from "./ImageSlider.vue";
+import LogBoard from "./LogBoard.vue";
 import AffectionList from "./AffectionList.vue";
 import NotificationCenter from "./NotificationCenter.vue";
 import { notificationPath } from "./notificationRoutes.mjs";
@@ -1138,6 +1136,7 @@ const me = ref(null),
   comments = ref([]),
   media = ref([]),
   history = ref([]);
+const notificationVersion = ref(0), liveStatus = ref("connecting");
 const busy = ref(false),
   loading = ref(true),
   error = ref(""),
@@ -1161,8 +1160,8 @@ const busy = ref(false),
   representativeId = ref(null),
   inviteEmail = ref(""),
   inviteName = ref("");
-let urls = [],
-  timer;
+let urls = [], liveUpdates = null, refreshTask = null, refreshAgain = false, livePending = false, liveSyncing = false, pageClosed = false;
+const imageCache = createImageCache(imageBlob);
 const localDevelopment = process.env.NODE_ENV === "development";
 const authError = new URLSearchParams(location.search).get("auth_error");
 const navigation = [
@@ -1171,7 +1170,7 @@ const navigation = [
   { path: "/relationships", icon: "◇", label: "관계도" },
   { path: "/affection", icon: "♥", label: "호감도" },
   { path: "/board/story", icon: "▤", label: "썰 게시판" },
-  { path: "/board/art", icon: "▧", label: "그림·로그" },
+  { path: "/board/art", icon: "▧", label: "로그" },
   { path: "/board/notice", icon: "▣", label: "공지" },
   { path: "/profile", icon: "○", label: "내 프로필" },
 ];
@@ -1344,7 +1343,7 @@ function postMedia(postId) {
 }
 function categoryLabel(s) {
   return (
-    { story: "썰 게시판", art: "그림·로그 보관함", notice: "공지" }[s] ||
+    { story: "썰 게시판", art: "로그", notice: "공지" }[s] ||
     "게시판"
   );
 }
@@ -1363,11 +1362,19 @@ async function act(fn) {
   }
 }
 function clearUrls() {
+  imageCache.clear();
   urls.forEach((u) => URL.revokeObjectURL(u));
   urls = [];
 }
-async function refresh() {
+function refresh() {
+  if (refreshTask) { refreshAgain = true; return refreshTask; }
+  refreshTask = (async () => { do { refreshAgain = false; await refreshOnce(); } while (refreshAgain && me.value && !pageClosed); })().finally(() => { refreshTask = null; });
+  return refreshTask;
+}
+async function refreshOnce() {
+  const memberId = me.value?.id;
   const data = await request("/data");
+  if (pageClosed || !memberId || me.value?.id !== memberId) return;
   const paths = [
     ...new Set(
       [
@@ -1376,24 +1383,18 @@ async function refresh() {
       ].filter(Boolean),
     ),
   ];
-  const images = {};
-  await Promise.all(
-    paths.map(async (p) => {
-      try {
-        images[p] = await imageBlob(p);
-      } catch {
-        images[p] = "";
-      }
-    }),
-  );
-  clearUrls();
-  urls = Object.values(images).filter(Boolean);
+  const images = await imageCache.resolve(paths);
+  if (pageClosed || me.value?.id !== memberId) return;
+  urls.forEach(url => URL.revokeObjectURL(url));
+  urls = [];
   characters.value = data.characters.map((c) => ({
     ...c,
     image: images[c.image_path] || "",
   }));
   media.value = data.media.map((m) => ({ ...m, image: images[m.path] || "" }));
   members.value = data.members;
+  const currentMember = data.members.find(member => member.id === memberId);
+  if (currentMember) me.value = { ...me.value, ...currentMember };
   relationships.value = data.relationships;
   affection.value = data.affection;
   posts.value = data.posts;
@@ -1654,6 +1655,21 @@ async function restoreRevision(id) {
   await refresh();
   await loadHistory();
 }
+async function syncLiveData() {
+  if (!me.value || pageClosed) return;
+  if (busy.value || modal.value || liveSyncing) { livePending = true; return; }
+  livePending = false;
+  liveSyncing = true;
+  try { await refresh(); } catch (e) {
+    if (e.message.includes("로그인")) { me.value = null; clearUrls(); }
+    error.value = e.message;
+  } finally {
+    liveSyncing = false;
+    if (livePending && !busy.value && !modal.value && me.value) queueMicrotask(syncLiveData);
+  }
+}
+watch([busy, modal], () => { if (livePending && !busy.value && !modal.value) syncLiveData(); });
+watch(() => me.value?.id, value => { if (!value) { liveUpdates?.stop(); liveUpdates = null; livePending = false; } });
 onMounted(async () => {
   try {
     me.value = await request("/me");
@@ -1669,23 +1685,12 @@ onMounted(async () => {
     } catch {
       /* Session storage can be disabled in private browsing. */
     }
-    timer = setInterval(async () => {
-      if (
-        document.visibilityState === "visible" &&
-        !busy.value &&
-        !modal.value
-      ) {
-        try {
-          await refresh();
-        } catch (e) {
-          if (e.message.includes("로그인")) {
-            clearUrls();
-            me.value = null;
-          }
-          error.value = e.message;
-        }
-      }
-    }, 60000);
+    liveUpdates = createLiveUpdates({
+      onData: syncLiveData,
+      onNotifications: () => { notificationVersion.value++; },
+      onStatus: value => { liveStatus.value = value; },
+      onUnauthorized: () => { me.value = null; clearUrls(); error.value = "로그인이 만료되었거나 접근이 차단되었습니다."; },
+    });
   } catch (e) {
     error.value = e.message;
     if (!me.value) {
@@ -1705,7 +1710,8 @@ onMounted(async () => {
   }
 });
 onBeforeUnmount(() => {
-  clearInterval(timer);
+  pageClosed = true;
+  liveUpdates?.stop();
   clearPostPreviews();
   clearUrls();
 });

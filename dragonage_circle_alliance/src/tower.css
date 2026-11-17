@@ -463,3 +463,47 @@ input[type=checkbox],input[type=range] { accent-color: var(--accent); }
   .notification-panel {top:57px;max-height:calc(100dvh - 73px);}
 }
 @media(max-width:350px) {.account-controls--compact .account-nickname{max-width:28px;}.account-controls--compact .account-avatar .portrait{width:24px;height:24px;}.topbar{gap:4px;padding-inline:8px;}}
+
+.notification-connection{margin-left:auto;color:var(--muted);font-size:10px;white-space:nowrap;}
+
+/* Character accents stay local to each identity; text is adjusted for contrast. */
+.character-themed {--character-text:var(--character-ink-light,var(--ink));}
+.dark-mode .character-themed {--character-text:var(--character-ink-dark,var(--ink));}
+.character-name,.affection-character.character-themed strong {color:var(--character-text,inherit);}
+.character-name small,.character-theme-preview small {color:var(--muted);}
+.character-card.character-themed,.profile-hero.character-themed {border-inline-start:3px solid var(--character-color,var(--line));}
+.portrait.character-themed {border-color:var(--character-color);color:var(--character-text);}
+.character-mention {font-weight:600;}
+.badge.character-themed {border-color:var(--character-color,var(--line));}
+.character-tags .character-themed input {accent-color:var(--character-color,var(--accent));}
+.character-theme-picker {padding:12px;border:1px solid var(--line);background:var(--field);margin:14px 0;}
+.character-theme-picker h4 {margin:0 0 8px;}
+.character-theme-inputs {display:flex;align-items:end;flex-wrap:wrap;gap:12px;}
+.editor .character-theme-inputs label {margin:0;}
+.character-theme-inputs input[type=color] {display:block;width:52px;height:40px;padding:3px;margin-top:6px;background:var(--panel);border:1px solid var(--line);cursor:pointer;}
+.character-theme-inputs input[type=text] {max-width:150px;font-family:monospace;}
+.character-color-presets {display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+.character-color-presets button {width:28px;height:28px;min-width:28px;padding:0;border:2px solid var(--field);border-radius:50%;background:var(--swatch);box-shadow:0 0 0 1px var(--line);}
+.character-color-presets button[aria-pressed=true] {outline:2px solid var(--ink);outline-offset:2px;}
+.character-theme-preview {margin:12px 0 0;font-weight:600;}
+.character-theme-preview small {margin-inline-start:8px;font-weight:400;}
+
+/* Log board: the same posts, with a compact text list or image previews. */
+.log-board-actions {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+.log-view-switch {display:flex;gap:4px;margin-inline-start:auto;}
+.log-view-switch button {display:inline-flex;align-items:center;gap:6px;}
+.log-view-switch button[aria-pressed=true] {background:var(--nav-active);border-color:var(--metal);color:var(--nav-text);}
+.log-text-list {border-block:1px solid var(--line);}
+.log-text-row+.log-text-row {border-top:1px solid var(--line);}
+.log-text-link {display:grid;grid-template-columns:minmax(0,1fr) minmax(70px,110px) minmax(180px,auto);align-items:center;gap:6px 16px;padding:12px 10px;}
+.log-text-link:hover {background:var(--accent-soft);}
+.log-text-link .log-row-title {margin:0;font-size:15px;line-height:1.6;overflow-wrap:anywhere;}
+.log-row-author {font-size:13px;overflow-wrap:anywhere;}
+.log-row-date {font-size:12px;color:var(--muted);}
+.log-row-tags {display:flex;gap:4px 10px;flex-wrap:wrap;font-size:12px;min-width:0;overflow-wrap:anywhere;}
+.log-text-link .log-row-tags {grid-column:1/-1;}
+.log-attachment-count {font-size:11px;font-weight:400;color:var(--muted);white-space:nowrap;}
+.art-post-card .log-image-summary {display:grid;grid-template-columns:minmax(0,1fr);gap:4px;}
+.log-image-summary .log-row-title {margin-bottom:2px;}
+.log-image-summary .log-row-tags {margin-top:3px;}
+@media(max-width:600px){.log-text-link {grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;padding:10px 6px;}.log-text-link .log-row-title{grid-column:1/-1;}.log-text-link .log-row-date{font-size:11px;}.log-view-switch button{padding:7px 10px;font-size:12px;}}

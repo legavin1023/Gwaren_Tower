@@ -264,3 +264,32 @@ test('local demo covers populated screens, stores real images, and preserves edi
   assert.equal((await env.DB.prepare('PRAGMA foreign_key_check').all()).results.length,0);
  }finally{env.DB.db.close();}
 });
+
+
+test('writes publish committed changes and notification recipients; reads and rejected writes do not publish',async()=>{
+ const env=await fixture(),events=[];
+ env.REALTIME={idFromName:name=>name,get:()=>({async fetch(url,options){events.push(JSON.parse(options.body));return new Response(null,{status:204});}})};
+ try{
+  await call(env,'/data');await call(env,'/notifications');assert.equal(events.length,0);
+  assert.equal((await call(env,'/posts','one','POST',{title:'Realtime',category:'story',body:'Event-driven'},{'X-Circle-Client-Id':'writer'})).status,200);
+  assert.equal(events.length,1);assert.equal(events[0].data,true);assert.equal(events[0].actorClient,'writer');assert.equal(events[0].actorMember,'one');assert.deepEqual(new Set(events[0].notificationMembers),new Set(['two','root']));
+  assert.equal((await call(env,'/posts','one','POST',{title:'Forbidden',category:'notice'})).status,403);assert.equal(events.length,1);
+  assert.equal((await call(env,'/notifications/read','two','POST',{all:true},{'X-Circle-Client-Id':'reader'})).status,200);
+  assert.deepEqual(events[1],{notificationMembers:['two'],actorMember:'two',actorClient:'reader'});
+  await call(env,'/auth/logout','one','POST',{});assert.deepEqual(events[2],{revokeSession:digest('one')});
+ }finally{env.DB.db.close();}
+});
+
+test('character theme survives save, updates and backup; malformed colors and foreign edits are rejected',async()=>{
+ const env=await fixture();try{
+  const created=await call(env,'/characters','one','POST',{name:'Theme',faction:'mage',extra:{theme_color:'#AA6384',other:'Preserve settings'}});
+  assert.equal(created.status,200);assert.equal(created.data.extra.theme_color,'#aa6384');
+  assert.equal((await call(env,'/data')).data.characters[0].extra.theme_color,'#aa6384');
+  const snapshot=(await call(env,'/backup/snapshot',null,'GET',undefined,{Authorization:'Bearer backup-test'})).data;
+  assert.equal(JSON.parse(snapshot.tables.characters[0].extra).theme_color,'#aa6384');
+  for(const color of ['red','#fff','#123456;color:red',123])assert.equal((await call(env,'/characters','one','POST',{...created.data,extra:{theme_color:color}})).status,400);
+  assert.equal((await call(env,'/characters','two','POST',{...created.data,extra:{theme_color:'#123456'}})).status,403);
+  const cleared=await call(env,'/characters','one','POST',{...created.data,extra:{...created.data.extra,theme_color:''}});
+  assert.equal(cleared.status,200);assert.equal(cleared.data.extra.theme_color,'');assert.equal(cleared.data.extra.other,'Preserve settings');
+ }finally{env.DB.db.close();}
+});

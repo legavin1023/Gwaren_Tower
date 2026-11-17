@@ -17,3 +17,12 @@ migrations_dir = "../migrations"
 [[r2_buckets]]
 binding = "MEDIA"
 bucket_name = "circle-alliance-local"
+
+
+[[durable_objects.bindings]]
+name = "REALTIME"
+class_name = "RealtimeHub"
+
+[[migrations]]
+tag = "v1-realtime"
+new_sqlite_classes = ["RealtimeHub"]
