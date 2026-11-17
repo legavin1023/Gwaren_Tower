@@ -13,3 +13,10 @@ export function mentionParts(text,characters) {
  return match && byId.has(match[2]) ? {text:byId.get(match[2]).name,id:match[2]} : {text:part};
  });
 }
+
+// Explicit character authors keep their identity. Owner comments use the owner's current representative.
+export function commentCharacter(comment, characters, members) {
+ const owner=members.find(member=>member.id===comment.owner_id);
+ const characterId=comment.character_id || owner?.representative_character_id;
+ return characters.find(character=>character.id===characterId && !character.deleted_at && character.owner_id===comment.owner_id) || null;
+}

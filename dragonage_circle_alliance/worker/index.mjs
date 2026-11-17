@@ -1,4 +1,5 @@
-import {tables,fields,fail,requireAdmin,canEdit,relationshipStatus,validateImage} from './policy.mjs';
+import { prepareNotifications, notificationStatement, sendNotifications, notificationRoute } from './notifications.mjs';
+import {tables,fields,fail,requireAdmin,requireSuperAdmin,isAdmin,memberView,memberChange,canEdit,relationshipStatus,validateImage} from './policy.mjs';
 const now=()=>new Date().toISOString(),id=()=>crypto.randomUUID();
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const hash=async value=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',typeof value==='string'?new TextEncoder().encode(value):value))].map(x=>x.toString(16).padStart(2,'0')).join('');
@@ -8,7 +9,7 @@ const decode=(table,row)=>{if(!row)return null;const r={...row};if(table==='char
 const encode=value=>typeof value==='object'&&value!==null?JSON.stringify(value):typeof value==='boolean'?Number(value):value??null;
 const get=async(env,t,key)=>decode(t,await env.DB.prepare(`SELECT * FROM ${t} WHERE id=?`).bind(key).first());
 const live=async(env,key)=>{const c=await get(env,'characters',key);if(!c||c.deleted_at)fail('존재하지 않는 캐릭터입니다.');return c;};
-async function session(req,env){const token=cookie(req,'circle_session');if(!token)fail('로그인이 필요합니다.',401);const row=await env.DB.prepare('SELECT m.* FROM members m JOIN sessions s ON s.member_id=m.id WHERE s.token_hash=? AND s.expires_at>? AND m.active=1').bind(await hash(token),Date.now()).first();if(!row)fail('로그인이 만료되었거나 접근이 차단되었습니다.',401);return decode('members',row);}
+async function session(req,env){const token=cookie(req,'circle_session');if(!token)fail('로그인이 필요합니다.',401);const row=await env.DB.prepare('SELECT m.* FROM members m JOIN sessions s ON s.member_id=m.id WHERE s.token_hash=? AND s.expires_at>? AND m.active=1').bind(await hash(token),Date.now()).first();if(!row)fail('로그인이 만료되었거나 접근이 차단되었습니다.',401);return memberView(env,decode('members',row));}
 async function auth(req,env,path){
  if(path==='/auth/login'){
   if(!env.GOOGLE_CLIENT_ID||!env.GOOGLE_CLIENT_SECRET||!env.BOOTSTRAP_ADMIN_EMAIL)fail('운영자가 Google 로그인과 관리자 이메일을 먼저 설정해야 합니다.',503);
@@ -34,11 +35,11 @@ async function auth(req,env,path){
   }catch{return new Response(null,{status:302,headers:{Location:env.SITE_ORIGIN+'/?auth_error=1','Set-Cookie':setCookie(env,'circle_oauth','',0)}});}
  }
  if(path==='/auth/logout'&&req.method==='POST'){
-  const token=cookie(req,'circle_session');if(token)await env.DB.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await hash(token)).run();return new Response('{}',{headers:{'Content-Type':'application/json','Set-Cookie':setCookie(env,'circle_session','',0),'Cache-Control':'no-store'}});
+  const token=cookie(req,'circle_session');if(token){const digest=await hash(token);await env.DB.batch([env.DB.prepare('DELETE FROM push_subscriptions WHERE session_hash=?').bind(digest),env.DB.prepare('DELETE FROM sessions WHERE token_hash=?').bind(digest)]);}return new Response('{}',{headers:{'Content-Type':'application/json','Set-Cookie':setCookie(env,'circle_session','',0),'Cache-Control':'no-store'}});
  }
  fail('인증 경로를 찾을 수 없습니다.',404);
 }
-async function saveRecord(env,me,table,input,restore=false){
+async function saveRecord(env,me,table,input,restore=false,ctx){
  if(!tables.includes(table))fail('지원하지 않는 자료입니다.',404);
  if(!input||typeof input!=='object'||Array.isArray(input))fail('잘못된 입력입니다.');
  const old=input.id?await get(env,table,input.id):null;
@@ -49,7 +50,7 @@ async function saveRecord(env,me,table,input,restore=false){
  if(table==='members'){
   requireAdmin(me);row.email=String(row.email||'').trim().toLowerCase();if(!/^\S+@\S+\.\S+$/.test(row.email))fail('올바른 이메일을 입력하세요.');
   if(old&&row.email!==old.email)fail('등록된 이메일은 변경할 수 없습니다.');
-  row.role=row.role||'member';row.active=row.active??true;if(old?.id===me.id&&(row.role!=='admin'||!row.active))fail('본인의 관리자 권한을 해제할 수 없습니다.');
+  row.role=row.role||'member';row.active=row.active??true;memberChange(env,me,old,row);
  }else if(['characters','posts','comments','media'].includes(table)){
   row.owner_id=old?.owner_id||me.id;if(old&&!canEdit(me,old))fail('본인의 콘텐츠만 수정할 수 있습니다.',403);
  }
@@ -68,7 +69,7 @@ async function saveRecord(env,me,table,input,restore=false){
  }
  if(['posts','comments','media'].includes(table)&&row.character_id){const actor=await live(env,row.character_id);if(actor.owner_id!==row.owner_id)fail('작성자 소유 캐릭터만 선택할 수 있습니다.',403);}
  if(table==='posts'){
-  if((row.category==='notice'||old?.category==='notice')&&me.role!=='admin')fail('공지 작성·수정은 운영자 전용입니다.',403);
+  if((row.category==='notice'||old?.category==='notice')&&!isAdmin(me))fail('공지 작성·수정은 운영자 전용입니다.',403);
   row.body??='';row.character_ids??=[];if(!Array.isArray(row.character_ids)||row.character_ids.length>100)fail('캐릭터 태그를 확인하세요.');for(const key of row.character_ids)await live(env,key);
  }
  if(['comments','media'].includes(table)&&row.post_id){const p=await get(env,'posts',row.post_id);if(!p||p.deleted_at)fail('게시글이 존재하지 않습니다.');if(table==='media'&&!canEdit(me,p))fail('본인 글에만 이미지를 첨부할 수 있습니다.',403);if(table==='media'&&p.category==='art'&&(!old||old.post_id!==row.post_id||old.deleted_at)){const count=await env.DB.prepare('SELECT COUNT(*) AS n FROM media WHERE post_id=? AND deleted_at IS NULL').bind(p.id).first();if(count.n>=10)fail('그림·로그 이미지는 최대 10장까지 첨부할 수 있습니다.');}}
@@ -86,11 +87,13 @@ async function saveRecord(env,me,table,input,restore=false){
  if(table!=='members')row.deleted_at=restore?(input.deleted_at||null):old?.deleted_at||null;
  const keys=Object.keys(row).filter(k=>!['image','google_sub'].includes(k));
  const stmt=old?env.DB.prepare(`UPDATE ${table} SET ${keys.filter(k=>k!=='id').map(k=>k+'=?').join(',')} WHERE id=? AND revision=?`).bind(...keys.filter(k=>k!=='id').map(k=>encode(row[k])),row.id,old.revision):env.DB.prepare(`INSERT INTO ${table} (${keys.join(',')}) VALUES (${keys.map(()=>'?').join(',')})`).bind(...keys.map(k=>encode(row[k])));
- const changes=await env.DB.batch([stmt,env.DB.prepare('INSERT INTO history(id,table_name,record_id,actor_id,action,before_json,after_json,created_at) SELECT ?,?,?,?,?,?,?,? WHERE changes()>0').bind(id(),table,row.id,me.id,restore?'restore':old?'update':'create',old?JSON.stringify(old):null,JSON.stringify(row),now())]);
- if(!changes[0].meta.changes)fail('다른 요청과 충돌했습니다. 새로고침하세요.',409);return row;
+ const events=restore?[]:await prepareNotifications(env,me,table,row,old);
+ const changes=await env.DB.batch([stmt,env.DB.prepare('INSERT INTO history(id,table_name,record_id,actor_id,action,before_json,after_json,created_at) SELECT ?,?,?,?,?,?,?,? WHERE changes()>0').bind(id(),table,row.id,me.id,restore?'restore':old?'update':'create',old?JSON.stringify(old):null,JSON.stringify(row),now()),...events.map(event=>notificationStatement(env,event,table,row))]);
+ if(changes[0].meta.changes&&events.length){const delivery=sendNotifications(env,events).catch(()=>console.error('Push delivery failed'));if(ctx?.waitUntil)ctx.waitUntil(delivery);else await delivery;}
+ if(!changes[0].meta.changes)fail('다른 요청과 충돌했습니다. 새로고침하세요.',409);return table==='members'?memberView(env,row):row;
 }
 async function snapshot(env){
- const names=[...tables,'uploads','history','backup_runs'];const results=await env.DB.batch(names.map(t=>env.DB.prepare('SELECT * FROM '+t+' ORDER BY created_at,'+(t==='uploads'?'path':'id'))));return {format:'circle-cloudflare-v1',exported_at:now(),tables:Object.fromEntries(names.map((t,i)=>[t,results[i].results]))};
+ const names=[...tables,'uploads','history','backup_runs','notifications'];const results=await env.DB.batch(names.map(t=>env.DB.prepare('SELECT * FROM '+t+' ORDER BY created_at,'+(t==='uploads'?'path':'id'))));return {format:'circle-cloudflare-v1',exported_at:now(),tables:Object.fromEntries(names.map((t,i)=>[t,results[i].results]))};
 }
 async function backupAuthorized(req,env,restore=false){const expected=restore?env.RESTORE_TOKEN:env.BACKUP_TOKEN;if(!expected||!req.headers.get('Authorization')||await hash(req.headers.get('Authorization'))!==await hash('Bearer '+expected))fail('백업 인증에 실패했습니다.',403);}
 async function backupRoute(req,env,path){
@@ -102,17 +105,17 @@ async function backupRoute(req,env,path){
  }
  if(path==='/backup/restore'&&req.method==='POST'){
   await backupAuthorized(req,env,true);const b=await req.json();if(b.format!=='circle-cloudflare-v1')fail('잘못된 백업 형식');
-  const names=[...tables,'uploads','history',...(Array.isArray(b.tables?.backup_runs)?['backup_runs']:[])];for(const t of names)if(!Array.isArray(b.tables?.[t]))fail('불완전한 백업: '+t);
+  const names=[...tables,'uploads','history',...(Array.isArray(b.tables?.backup_runs)?['backup_runs']:[]),...(Array.isArray(b.tables?.notifications)?['notifications']:[])];for(const t of names)if(!Array.isArray(b.tables?.[t]))fail('불완전한 백업: '+t);
   for(const u of b.tables.uploads){const obj=await env.MEDIA.head(u.path);if(!obj||obj.size!==u.bytes)fail('이미지 원본을 먼저 복구하세요: '+u.path);}
   const statements=[env.DB.prepare('PRAGMA defer_foreign_keys=ON')];
   for(const t of names){const schema=await env.DB.prepare('PRAGMA table_info('+t+')').all();const allowed=new Set(schema.results.map(c=>c.name));for(const row of b.tables[t]){const keys=Object.keys(row);if(!keys.length||keys.some(k=>!allowed.has(k)))fail('잘못된 백업 필드');statements.push(env.DB.prepare(`INSERT INTO ${t} (${keys.join(',')}) VALUES (${keys.map(()=>'?').join(',')}) ON CONFLICT(${t==='uploads'?'path':'id'}) DO UPDATE SET ${keys.map(k=>`${k}=excluded.${k}`).join(',')}`).bind(...keys.map(k=>row[k])));}}
   // Supplied snapshot is trusted only after explicit restore-token authentication.
-  statements.push(env.DB.prepare('DELETE FROM sessions'));await env.DB.batch(statements);return json({ok:true});
+  statements.push(env.DB.prepare('DELETE FROM sessions'),env.DB.prepare('DELETE FROM push_subscriptions'));await env.DB.batch(statements);return json({ok:true});
  }
  fail('백업 경로를 찾을 수 없습니다.',404);
 }
 async function serveFile(env,key){const obj=await env.MEDIA.get(key);if(!obj)fail('이미지를 찾을 수 없습니다.',404);return new Response(obj.body,{headers:{'Content-Type':obj.httpMetadata?.contentType||'application/octet-stream','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"}});}
-export default {async fetch(req,env){
+export default {async fetch(req,env,ctx){
  try{
   const url=new URL(req.url);const path=url.pathname.replace(/^\/api/,'');
   if(path.startsWith('/backup/'))return await backupRoute(req,env,path);
@@ -120,22 +123,35 @@ export default {async fetch(req,env){
   if(path.startsWith('/auth/'))return await auth(req,env,path);
   const me=await session(req,env);
   if(path==='/me')return json(me);
+  if(path.startsWith('/notifications')||path.startsWith('/push/'))return await notificationRoute(req,env,path,me,await hash(cookie(req,'circle_session')));
   if(path==='/data'&&req.method==='GET'){
-   const results=await env.DB.batch(tables.map(t=>env.DB.prepare('SELECT '+(t==='members'&&me.role!=='admin'?'id,nickname,role,active,created_at,updated_at':'*')+' FROM '+t+(t==='members'?'':' WHERE deleted_at IS NULL')+' ORDER BY created_at')));return json(Object.fromEntries(tables.map((t,i)=>[t,results[i].results.map(r=>decode(t,r))])));
+   const results=await env.DB.batch(tables.map(t=>env.DB.prepare('SELECT * FROM '+t+(t==='members'?'':' WHERE deleted_at IS NULL')+' ORDER BY created_at')));
+   return json(Object.fromEntries(tables.map((t,i)=>[t,results[i].results.map(row=>{
+    const record=decode(t,row);if(t!=='members')return record;
+    const member=memberView(env,record);
+    if(isAdmin(me)){delete member.google_sub;return member;}
+    return Object.fromEntries(['id','nickname','role','active','created_at','updated_at','representative_character_id'].map(key=>[key,member[key]]));
+   })])));
+
   }
-  if(path==='/export'&&req.method==='GET'){requireAdmin(me);return json(await snapshot(env));}
-  if(path==='/profile'&&req.method==='POST'){const b=await req.json();const nickname=String(b.nickname||'').trim();if(!nickname||nickname.length>80)fail('닉네임은 1~80자입니다.');await env.DB.prepare('UPDATE members SET nickname=?,updated_at=?,revision=revision+1 WHERE id=?').bind(nickname,now(),me.id).run();return json(await get(env,'members',me.id));}
-  if(path==='/history'&&req.method==='GET'){requireAdmin(me);return json((await env.DB.prepare('SELECT * FROM history ORDER BY created_at DESC LIMIT 200').all()).results);}
-  if(/^\/history\/[^/]+\/restore$/.test(path)&&req.method==='POST'){requireAdmin(me);const h=await env.DB.prepare('SELECT * FROM history WHERE id=?').bind(path.split('/')[2]).first();if(!h?.before_json)fail('복구할 이전 기록이 없습니다.');const before=JSON.parse(h.before_json);delete before.revision;return json(await saveRecord(env,me,h.table_name,before,true));}
+  if(path==='/export'&&req.method==='GET'){requireSuperAdmin(me);return json(await snapshot(env));}
+  if(path==='/profile'&&req.method==='POST'){
+   const b=await req.json(),nickname=String(b.nickname||'').trim();if(!nickname||nickname.length>80)fail('닉네임은 1~80자입니다.');
+   const representative=b.representative_character_id===undefined?me.representative_character_id:(b.representative_character_id||null);
+   if(representative){const character=await live(env,representative);if(character.owner_id!==me.id)fail('본인의 캐릭터만 대표 캐릭터로 선택할 수 있습니다.',403);}
+   await env.DB.prepare('UPDATE members SET nickname=?,representative_character_id=?,updated_at=?,revision=revision+1 WHERE id=?').bind(nickname,representative??null,now(),me.id).run();return json(memberView(env,await get(env,'members',me.id)));
+  }
+  if(path==='/history'&&req.method==='GET'){requireSuperAdmin(me);return json((await env.DB.prepare('SELECT * FROM history ORDER BY created_at DESC LIMIT 200').all()).results);}
+  if(/^\/history\/[^/]+\/restore$/.test(path)&&req.method==='POST'){requireSuperAdmin(me);const h=await env.DB.prepare('SELECT * FROM history WHERE id=?').bind(path.split('/')[2]).first();if(!h?.before_json)fail('복구할 이전 기록이 없습니다.');const before=JSON.parse(h.before_json);delete before.revision;return json(await saveRecord(env,me,h.table_name,before,true));}
   if(path.startsWith('/files/')&&req.method==='GET')return await serveFile(env,decodeURIComponent(path.slice(7)));
   if(path==='/upload'&&req.method==='POST'){
    const declared=Number(req.headers.get('Content-Length'));if(declared>10485760)fail('이미지는 10MB 이하여야 합니다.');const mime=req.headers.get('Content-Type');if(!['image/webp','image/gif'].includes(mime))fail('WebP 또는 GIF 이미지를 업로드하세요.');const bytes=await req.arrayBuffer();validateImage(bytes,mime);const ext={'image/jpeg':'jpg','image/png':'png','image/gif':'gif','image/webp':'webp'}[mime],key=me.id+'/'+id()+'.'+ext;await env.MEDIA.put(key,bytes,{httpMetadata:{contentType:mime}});await env.DB.prepare('INSERT INTO uploads(path,owner_id,bytes,mime,sha256,created_at) VALUES(?,?,?,?,?,?)').bind(key,me.id,bytes.byteLength,mime,await hash(bytes),now()).run();return json({path:key});
   }
   const parts=path.split('/').filter(Boolean),table=parts[0];if(!tables.includes(table))fail('페이지를 찾을 수 없습니다.',404);
-  if(parts.length===1&&req.method==='POST'){if(Number(req.headers.get('Content-Length'))>1000000)fail('입력 크기를 초과했습니다.');return json(await saveRecord(env,me,table,await req.json()));}
+  if(parts.length===1&&req.method==='POST'){if(Number(req.headers.get('Content-Length'))>1000000)fail('입력 크기를 초과했습니다.');return json(await saveRecord(env,me,table,await req.json(),false,ctx));}
   if(parts.length===2&&req.method==='DELETE'){
    if(table==='members'||table==='affection')fail('이 기록은 삭제할 수 없습니다.');const old=await get(env,table,parts[1]);if(!old||old.deleted_at)fail('기록을 찾을 수 없습니다.',404);
-   if(table==='relationships'){const a=await live(env,old.source_id),b=await live(env,old.target_id);if(me.role!=='admin'&&![a.owner_id,b.owner_id].includes(me.id))fail('관계 당사자만 삭제할 수 있습니다.',403);}else if(!canEdit(me,old))fail('본인 콘텐츠만 삭제할 수 있습니다.',403);
+   if(table==='relationships'){const a=await live(env,old.source_id),b=await live(env,old.target_id);if(!isAdmin(me)&&![a.owner_id,b.owner_id].includes(me.id))fail('관계 당사자만 삭제할 수 있습니다.',403);}else if(!canEdit(me,old))fail('본인 콘텐츠만 삭제할 수 있습니다.',403);
    const stamp=now(),next={...old,deleted_at:stamp};await env.DB.batch([env.DB.prepare(`UPDATE ${table} SET deleted_at=?,updated_at=?,revision=revision+1 WHERE id=? AND revision=?`).bind(stamp,stamp,old.id,old.revision),env.DB.prepare('INSERT INTO history(id,table_name,record_id,actor_id,action,before_json,after_json,created_at) SELECT ?,?,?,?,?,?,?,? WHERE changes()>0').bind(id(),table,old.id,me.id,'delete',JSON.stringify(old),JSON.stringify(next),stamp)]);return json({ok:true});
   }
   fail('지원하지 않는 요청입니다.',405);

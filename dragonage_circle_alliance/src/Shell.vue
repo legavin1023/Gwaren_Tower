@@ -33,6 +33,13 @@
         >
       </nav>
       <div class="sidebar-bottom">
+        <router-link
+          v-if="representative"
+          :to="'/characters/' + representative.id"
+          class="comment-author"
+          :aria-label="representative.name + ' 캐릭터 소개 보기'"
+          ><Portrait :character="representative"
+        /></router-link>
         <p>{{ me.nickname || me.email }}</p>
         <button class="outline-button" @click="dark = !dark">
           {{ dark ? "밝게 보기" : "어둡게 보기" }}</button
@@ -46,7 +53,8 @@
           <h1 class="topbar-title">{{ pageTitle }}</h1>
         </div>
         <div class="toolbar">
-          <span class="badge">{{ admin ? "운영자" : "회원" }}</span
+          <NotificationCenter :version="posts.length + comments.length" />
+          <span class="badge">{{ roleLabel(me.role) }}</span
           ><button
             class="secondary-button"
             :disabled="busy"
@@ -194,14 +202,25 @@
               <section class="card">
                 <h3>캐릭터 프로필</h3>
                 <template v-for="f in profileFields" :key="f.key">
-                  <h4>{{ f.label }}</h4><p class="prose">{{ fieldValue(character, f) || '아직 기록되지 않았습니다.' }}</p>
-                </template>
-                <h3>오너용 추가 설정</h3>
-                <template v-for="f in ownerFields" :key="f.key">
-                  <h4>{{ f.label }}</h4><p class="prose">{{ character[f.key] || '아직 기록되지 않았습니다.' }}</p>
+                  <h4>{{ f.label }}</h4>
+                  <p class="prose">
+                    {{
+                      fieldValue(character, f) || "아직 기록되지 않았습니다."
+                    }}
+                  </p>
                 </template>
                 <template v-for="(value, key) in character.extra" :key="key">
-                  <template v-if="!extraFields.some(f => f.key === key)"><h4>{{ key }}</h4><p class="prose">{{ value }}</p></template>
+                  <template v-if="!extraFields.some((f) => f.key === key)"
+                    ><h4>{{ key }}</h4>
+                    <p class="prose">{{ value }}</p></template
+                  >
+                </template>
+                <h3>오너란</h3>
+                <template v-for="f in ownerFields" :key="f.key">
+                  <h4>{{ f.label }}</h4>
+                  <p class="prose">
+                    {{ fieldValue(character, f) || "아직 기록되지 않았습니다." }}
+                  </p>
                 </template>
               </section>
               <section class="card">
@@ -275,9 +294,24 @@
                   ><b>{{ r.name }}</b
                   ><span class="badge">{{ statusLabel(r.status) }}</span>
                   <p class="prose">{{ r.description }}</p>
-                  <div v-if="r.status === 'pending' && ownsId(r.target_id)" class="toolbar">
-                    <button class="primary-button" :disabled="busy" @click="act(() => updateStatus(r, 'approved'))">관계 수락</button>
-                    <button class="secondary-button" :disabled="busy" @click="act(() => updateStatus(r, 'rejected'))">거절</button>
+                  <div
+                    v-if="r.status === 'pending' && ownsId(r.target_id)"
+                    class="toolbar"
+                  >
+                    <button
+                      class="primary-button"
+                      :disabled="busy"
+                      @click="act(() => updateStatus(r, 'approved'))"
+                    >
+                      관계 수락
+                    </button>
+                    <button
+                      class="secondary-button"
+                      :disabled="busy"
+                      @click="act(() => updateStatus(r, 'rejected'))"
+                    >
+                      거절
+                    </button>
                   </div>
                 </article>
                 <h3>이미지 갤러리</h3>
@@ -383,6 +417,7 @@
             v-if="graph"
             :characters="characters"
             :relationships="relationships"
+            :dark="dark"
             :faction="faction"
             :kind="kind"
             :focus="focus"
@@ -609,8 +644,63 @@
                   maxlength="80"
               /></label>
               <p class="muted">{{ me.email }}</p>
+              <label
+                >대표 캐릭터
+                <select
+                  v-model="representativeId"
+                  class="form-input"
+                  aria-label="대표 캐릭터"
+                >
+                  <option :value="null">선택하지 않음</option>
+                  <option v-for="c in mine" :key="c.id" :value="c.id">
+                    {{ c.name }}
+                  </option>
+                </select>
+              </label>
+              <router-link
+                v-if="byId(representativeId)"
+                :to="'/characters/' + representativeId"
+                class="comment-author representative-preview"
+                ><Portrait :character="byId(representativeId)" />{{
+                  name(representativeId)
+                }}</router-link
+              >
+              <p class="muted">
+                오너 이름으로 남기는 댓글과 내 프로필에 대표 캐릭터 프사를
+                표시합니다. 프사를 누르면 캐릭터 소개로 이동합니다.
+              </p>
+              <p v-if="!mine.length" class="muted">
+                캐릭터를 등록하면 대표 캐릭터를 선택할 수 있습니다.
+              </p>
               <button class="primary-button" :disabled="busy">저장</button>
             </form>
+          </section>
+          <section class="card menu-guide" aria-labelledby="menu-guide-title">
+            <h2 id="menu-guide-title">사이트 메뉴 안내</h2>
+            <dl>
+              <dt><router-link to="/home">⌂ 메인</router-link></dt>
+              <dd>최근 공지와 캐릭터·관계·이야기 현황을 확인합니다.</dd>
+              <dt><router-link to="/characters">♙ 캐릭터</router-link></dt>
+              <dd>캐릭터를 등록하고 프로필과 설정을 작성합니다. 다른 캐릭터의 소개를 보고 호감도·관계·교류 기록을 남길 수 있습니다.</dd>
+              <dt><router-link to="/relationships">◇ 관계도</router-link></dt>
+              <dd>캐릭터 사이의 관계를 제안하고 수락합니다. 서로 확인한 관계는 관계도와 목록에 표시됩니다.</dd>
+              <dt><router-link to="/board/story">▤ 썰 게시판</router-link></dt>
+              <dd>캐릭터의 이야기와 썰을 나눕니다. 여러 캐릭터를 태그하고 댓글로 교류할 수 있습니다.</dd>
+              <dt><router-link to="/board/art">▧ 그림·로그</router-link></dt>
+              <dd>그림과 교류 로그를 올립니다. 글마다 이미지를 최대 10장 첨부할 수 있으며, 일반 이미지는 WebP로 압축하고 GIF는 원본 애니메이션을 유지합니다.</dd>
+              <dt><router-link to="/gallery">▦ 이미지 보관함</router-link></dt>
+              <dd>사이트에 등록한 이미지를 한곳에서 모아 봅니다. 연결된 캐릭터나 게시글로 이동할 수 있고, 이미지만 따로 등록할 수도 있습니다.</dd>
+              <dt><router-link to="/board/notice">▣ 공지</router-link></dt>
+              <dd>사이트 이용과 운영에 관한 공지를 확인합니다. 관리자가 작성합니다.</dd>
+              <dt><router-link to="/profile">○ 내 프로필</router-link></dt>
+              <dd>오너 닉네임과 대표 캐릭터를 설정합니다. 오너 이름으로 쓴 댓글에는 대표 캐릭터 프사가 표시되며, 프사를 누르면 캐릭터 소개로 이동합니다.</dd>
+              <dt>🔔 상단 알림</dt>
+              <dd>새 글·댓글, 내 캐릭터 태그와 내 글의 반응을 확인합니다. 알림창에서 브라우저 알림을 허용하고 이 기기에서 받을 알림 종류를 선택할 수 있습니다.</dd>
+              <template v-if="admin">
+                <dt><router-link to="/admin">⚙ 운영 관리</router-link></dt>
+                <dd>회원을 초대하고 일반 회원의 접근을 관리합니다.<template v-if="superAdmin"> 최고 관리자는 관리자 지정·해제와 DB 내보내기·변경 기록 조회·복구도 할 수 있습니다.</template></dd>
+              </template>
+            </dl>
           </section></template
         >
         <template v-else-if="route.path === '/admin' && admin"
@@ -644,9 +734,9 @@
             >
               <span
                 >{{ member.nickname }} · {{ member.email }}
-                <span class="badge">{{ member.role }}</span></span
+                <span class="badge">{{ roleLabel(member.role) }}</span></span
               ><button
-                v-if="member.id !== me.id"
+                v-if="canManageMember(member)"
                 class="secondary-button"
                 :disabled="busy"
                 @click="
@@ -657,9 +747,10 @@
               >
                 {{ member.active ? "접근 차단" : "차단 해제" }}
               </button>
+              <button v-if="superAdmin && member.id !== me.id && member.role !== 'superadmin'" class="outline-button" :disabled="busy" @click="act(() => changeMemberRole(member))">{{ member.role === 'admin' ? '일반 회원으로 변경' : '관리자로 지정' }}</button>
             </article>
           </section>
-          <section class="card">
+          <section v-if="superAdmin" class="card">
             <h2>백업과 사용량</h2>
             <p>
               등록 이미지 {{ media.length }}개 ·
@@ -684,7 +775,7 @@
               방법은 docs/배포와-백업.md를 참고하세요.
             </p>
           </section>
-          <section class="card">
+          <section v-if="superAdmin" class="card">
             <h2>최근 변경 및 삭제 복구</h2>
             <button class="outline-button" @click="act(loadHistory)">
               변경 기록 확인
@@ -721,186 +812,288 @@
     >
       <div class="modal-head">
         <h2>{{ modalTitle }}</h2>
-        <button class="secondary-button" :disabled="busy" @click="modal = ''" aria-label="닫기">
+        <button
+          class="secondary-button"
+          :disabled="busy"
+          @click="modal = ''"
+          aria-label="닫기"
+        >
           ×
         </button>
       </div>
-      <form @submit.prevent="act(submitDraft)"><fieldset :disabled="busy" class="editor-fields">
-        <template v-if="modal === 'character'">
-          <label
-            >프로필 이미지<input
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              @change="file = $event.target.files[0]"
-          /></label>
-          <label v-for="f in profileFields" :key="f.key">{{ f.label }}
-            <select v-if="f.options" :value="fieldValue(draft, f)" @change="setField(f, $event.target.value)" class="form-input">
-              <option value="">선택</option><option v-for="option in f.options" :key="option">{{ option }}</option>
-              <option v-if="fieldValue(draft, f) && !f.options.includes(fieldValue(draft, f))" :value="fieldValue(draft, f)">{{ fieldValue(draft, f) }} (기존 입력)</option>
-            </select>
-            <textarea v-else-if="f.long" :value="fieldValue(draft, f)" @input="setField(f, $event.target.value)" class="form-textarea" rows="4"></textarea>
-            <input v-else :value="fieldValue(draft, f)" @input="setField(f, $event.target.value)" class="form-input" :required="f.key === 'name'" :maxlength="f.key === 'name' ? 120 : undefined" />
-          </label>
-          <h3>오너용 추가 설정</h3>
-          <p class="muted">캐릭터의 보충 설정입니다. 비밀 설정도 로그인한 오너들에게 공유됩니다.</p>
-          <label>별명<input v-model="draft.alias" class="form-input" /></label>
-          <label>계열<select v-model="draft.faction" class="form-input"><option value="mage">마법사</option><option value="templar">템플러</option></select></label>
-          <label v-for="f in ownerFields" :key="f.key">{{ f.label }}
-            <textarea v-if="f.long" v-model="draft[f.key]" class="form-textarea" rows="4"></textarea>
-            <input v-else v-model="draft[f.key]" class="form-input" />
-          </label>
-          <p class="muted">프로필 이미지는 WebP로 압축하며, GIF는 원본 애니메이션을 유지합니다.</p>
-        </template>
-        <template v-if="modal === 'relationship'"
-          ><label
-            >내 캐릭터<select
-              v-model="draft.source_id"
-              :disabled="!!draft.id"
-              class="form-input"
-              required
+      <form @submit.prevent="act(submitDraft)">
+        <fieldset :disabled="busy" class="editor-fields">
+          <template v-if="modal === 'character'">
+            <label
+              >프로필 이미지<input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                @change="file = $event.target.files[0]"
+            /></label>
+            <label v-for="f in profileFields" :key="f.key"
+              >{{ f.label }}
+              <select
+                v-if="f.options"
+                :value="fieldValue(draft, f)"
+                @change="setField(f, $event.target.value)"
+                class="form-input"
+              >
+                <option value="">선택</option>
+                <option v-for="option in f.options" :key="option">
+                  {{ option }}
+                </option>
+                <option
+                  v-if="
+                    fieldValue(draft, f) &&
+                    !f.options.includes(fieldValue(draft, f))
+                  "
+                  :value="fieldValue(draft, f)"
+                >
+                  {{ fieldValue(draft, f) }} (기존 입력)
+                </option>
+              </select>
+              <textarea
+                v-else-if="f.long"
+                :value="fieldValue(draft, f)"
+                @input="setField(f, $event.target.value)"
+                class="form-textarea"
+                rows="4"
+              ></textarea>
+              <input
+                v-else
+                :value="fieldValue(draft, f)"
+                @input="setField(f, $event.target.value)"
+                class="form-input"
+                :required="f.key === 'name'"
+                :maxlength="f.key === 'name' ? 120 : undefined"
+              />
+            </label>
+            <label
+              >별명<input v-model="draft.alias" class="form-input"
+            /></label>
+            <label
+              >계열<select v-model="draft.faction" class="form-input">
+                <option value="mage">마법사</option>
+                <option value="templar">템플러</option>
+              </select></label
             >
-              <option value="">선택</option>
-              <option
-                v-for="c in draft.id ? characters : mine"
-                :key="c.id"
-                :value="c.id"
+            <p class="muted">비밀 설정도 로그인한 오너들에게 공유됩니다.</p>
+            <h3>오너란</h3>
+            <label v-for="f in ownerFields" :key="f.key"
+              >{{ f.label }}
+              <textarea
+                v-if="f.long"
+                :value="fieldValue(draft, f)" @input="setField(f, $event.target.value)"
+                class="form-textarea"
+                rows="4"
+              ></textarea>
+              <input v-else :value="fieldValue(draft, f)" @input="setField(f, $event.target.value)" class="form-input" />
+            </label>
+          </template>
+          <template v-if="modal === 'relationship'"
+            ><label
+              >내 캐릭터<select
+                v-model="draft.source_id"
+                :disabled="!!draft.id"
+                class="form-input"
+                required
               >
-                {{ c.name }}
-              </option>
-            </select></label
-          ><label
-            >상대 캐릭터<select
-              v-model="draft.target_id"
-              :disabled="!!draft.id"
-              class="form-input"
-              required
+                <option value="">선택</option>
+                <option
+                  v-for="c in draft.id ? characters : mine"
+                  :key="c.id"
+                  :value="c.id"
+                >
+                  {{ c.name }}
+                </option>
+              </select></label
+            ><label
+              >상대 캐릭터<select
+                v-model="draft.target_id"
+                :disabled="!!draft.id"
+                class="form-input"
+                required
+              >
+                <option value="">선택</option>
+                <option
+                  v-for="c in characters.filter(
+                    (c) => c.id !== draft.source_id,
+                  )"
+                  :key="c.id"
+                  :value="c.id"
+                >
+                  {{ c.name }}
+                </option>
+              </select></label
+            ><label
+              >관계 이름<input
+                v-model="draft.name"
+                class="form-input"
+                required
+                maxlength="160" /></label
+            ><label
+              >관계 유형<input
+                v-model="draft.kind"
+                class="form-input"
+                list="kinds"
+                required
+              /><datalist id="kinds">
+                <option
+                  v-for="k in [
+                    '친구',
+                    '연인',
+                    '가족',
+                    '동료',
+                    '사제',
+                    '라이벌',
+                    '적대',
+                    '일방적 감정',
+                    '사용자 지정',
+                  ]"
+                  :key="k"
+                >
+                  {{ k }}
+                </option>
+              </datalist></label
+            ><label
+              >관계 설명<textarea
+                v-model="draft.description"
+                class="form-textarea"
+                rows="5"
+              ></textarea></label
+            ><label
+              ><input v-model="draft.directed" type="checkbox" /> 방향이 있는
+              일방적 관계</label
             >
-              <option value="">선택</option>
-              <option
-                v-for="c in characters.filter((c) => c.id !== draft.source_id)"
-                :key="c.id"
-                :value="c.id"
-              >
-                {{ c.name }}
-              </option>
-            </select></label
-          ><label
-            >관계 이름<input
-              v-model="draft.name"
-              class="form-input"
-              required
-              maxlength="160" /></label
-          ><label
-            >관계 유형<input
-              v-model="draft.kind"
-              class="form-input"
-              list="kinds"
-              required
-            /><datalist id="kinds">
-              <option
-                v-for="k in [
-                  '친구',
-                  '연인',
-                  '가족',
-                  '동료',
-                  '사제',
-                  '라이벌',
-                  '적대',
-                  '일방적 감정',
-                  '사용자 지정',
-                ]"
-                :key="k"
-              >
-                {{ k }}
-              </option>
-            </datalist></label
-          ><label
-            >관계 설명<textarea
-              v-model="draft.description"
-              class="form-textarea"
-              rows="5"
-            ></textarea></label
-          ><label
-            ><input v-model="draft.directed" type="checkbox" /> 방향이 있는
-            일방적 관계</label
+            <p class="muted">
+              다른 오너의 캐릭터와 맺는 관계는 상대 승인 후 성립합니다. 내용을
+              수정하면 다시 승인을 받습니다.
+            </p></template
           >
-          <p class="muted">
-            다른 오너의 캐릭터와 맺는 관계는 상대 승인 후 성립합니다. 내용을
-            수정하면 다시 승인을 받습니다.
-          </p></template
-        >
-        <template v-if="modal === 'post'">
-          <section v-if="draft.category === 'art'" class="post-attachments" aria-label="이미지 첨부">
-            <h3>이미지 첨부 <small>{{ postImageCount }} / 10</small></h3>
-            <input id="post-images" type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" :disabled="postImageCount >= 10" @change="selectPostImages" />
-            <div class="post-image-slots">
-              <div v-for="(slot, index) in postImageSlots" :key="index" class="post-image-slot">
-                <template v-if="slot">
-                  <img :src="slot.preview || slot.image" :alt="slot.name || slot.caption || ('첨부 이미지 ' + (index + 1))" />
-                  <span>{{ index + 1 }}</span>
-                  <button type="button" :aria-label="(index + 1) + '번 이미지 제외'" @click="removePostImage(slot)">×</button>
-                </template>
-                <label v-else for="post-images" :aria-label="(index + 1) + '번 이미지 첨부'">＋<small>{{ index + 1 }}</small></label>
-              </div>
-            </div>
-            <p class="muted">최대 10장 · 일반 이미지는 WebP 압축 · GIF는 원본 애니메이션 유지 (10MB 이하)</p>
-          </section>
-          <label
-            >제목<input
-              v-model="draft.title"
-              class="form-input"
-              required
-              maxlength="200" /></label
-          ><label
-            >작성 캐릭터<select v-model="draft.character_id" class="form-input">
-              <option :value="null">오너로 작성</option>
-              <option v-for="c in mine" :key="c.id" :value="c.id">
-                {{ c.name }}
-              </option>
-            </select></label
-          ><label
-            >내용<textarea
-              v-model="draft.body"
-              class="form-textarea"
-              rows="10"
-            ></textarea></label
-          ><label
-            >태그할 캐릭터 (여러 명 선택 가능)</label>
-            <div class="character-tags" role="group" aria-label="태그할 캐릭터">
-              <label v-for="c in characters" :key="c.id"><input type="checkbox" v-model="draft.character_ids" :value="c.id" /> {{ c.name }} <small>· {{ owner(c.owner_id) }}</small></label>
-            </div>
-</template
-        >
-        <template v-if="modal === 'media'"
-          ><label
-            >이미지<input
-              type="file"
-              required
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              @change="file = $event.target.files[0]" /></label
-          ><label
-            >설명<input v-model="draft.caption" class="form-input" /></label
-          ><label
-            >연결할 내 캐릭터<select
-              v-model="draft.character_id"
-              class="form-input"
+          <template v-if="modal === 'post'">
+            <section
+              v-if="draft.category === 'art'"
+              class="post-attachments"
+              aria-label="이미지 첨부"
             >
-              <option :value="null">없음</option>
-              <option v-for="c in mine" :key="c.id" :value="c.id">
-                {{ c.name }}
-              </option>
-            </select></label
-          ></template
-        >
-        <p v-if="error" class="error" role="alert">{{ error }}</p>
-        <div class="toolbar">
-          <button class="primary-button" :disabled="busy">
-            {{ busy ? "저장 중…" : "저장" }}</button
-          ><button type="button" class="secondary-button" :disabled="busy" @click="modal = ''">
-            × 닫기
-          </button>
-        </div>
-      </fieldset></form>
+              <h3>
+                이미지 첨부 <small>{{ postImageCount }} / 10</small>
+              </h3>
+              <input
+                id="post-images"
+                type="file"
+                multiple
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                :disabled="postImageCount >= 10"
+                @change="selectPostImages"
+              />
+              <div class="post-image-slots">
+                <div
+                  v-for="(slot, index) in postImageSlots"
+                  :key="index"
+                  class="post-image-slot"
+                >
+                  <template v-if="slot">
+                    <img
+                      :src="slot.preview || slot.image"
+                      :alt="
+                        slot.name ||
+                        slot.caption ||
+                        '첨부 이미지 ' + (index + 1)
+                      "
+                    />
+                    <span>{{ index + 1 }}</span>
+                    <button
+                      type="button"
+                      :aria-label="index + 1 + '번 이미지 제외'"
+                      @click="removePostImage(slot)"
+                    >
+                      ×
+                    </button>
+                  </template>
+                  <label
+                    v-else
+                    for="post-images"
+                    :aria-label="index + 1 + '번 이미지 첨부'"
+                    >＋<small>{{ index + 1 }}</small></label
+                  >
+                </div>
+              </div>
+              <p class="muted">
+                최대 10장 · 일반 이미지는 WebP 압축 · GIF는 원본 애니메이션 유지
+                (10MB 이하)
+              </p>
+            </section>
+            <label
+              >제목<input
+                v-model="draft.title"
+                class="form-input"
+                required
+                maxlength="200" /></label
+            ><label
+              >작성 캐릭터<select
+                v-model="draft.character_id"
+                class="form-input"
+              >
+                <option :value="null">오너로 작성</option>
+                <option v-for="c in mine" :key="c.id" :value="c.id">
+                  {{ c.name }}
+                </option>
+              </select></label
+            ><label
+              >내용<textarea
+                v-model="draft.body"
+                class="form-textarea"
+                rows="10"
+              ></textarea></label
+            ><label>태그할 캐릭터 (여러 명 선택 가능)</label>
+            <div class="character-tags" role="group" aria-label="태그할 캐릭터">
+              <label v-for="c in characters" :key="c.id"
+                ><input
+                  type="checkbox"
+                  v-model="draft.character_ids"
+                  :value="c.id"
+                />
+                {{ c.name }} <small>· {{ owner(c.owner_id) }}</small></label
+              >
+            </div>
+          </template>
+          <template v-if="modal === 'media'"
+            ><label
+              >이미지<input
+                type="file"
+                required
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                @change="file = $event.target.files[0]" /></label
+            ><label
+              >설명<input v-model="draft.caption" class="form-input" /></label
+            ><label
+              >연결할 내 캐릭터<select
+                v-model="draft.character_id"
+                class="form-input"
+              >
+                <option :value="null">없음</option>
+                <option v-for="c in mine" :key="c.id" :value="c.id">
+                  {{ c.name }}
+                </option>
+              </select></label
+            ></template
+          >
+          <p v-if="error" class="error" role="alert">{{ error }}</p>
+          <div class="toolbar">
+            <button class="primary-button" :disabled="busy">
+              {{ busy ? "저장 중…" : "저장" }}</button
+            ><button
+              type="button"
+              class="secondary-button"
+              :disabled="busy"
+              @click="modal = ''"
+            >
+              × 닫기
+            </button>
+          </div>
+        </fieldset>
+      </form>
     </section>
   </div>
   <div v-if="deleteTarget" class="modal-overlay">
@@ -910,8 +1103,12 @@
       aria-modal="true"
       aria-label="삭제 확인"
     >
-      <h3>이 기록을 삭제할까요?</h3>
-      <p>목록에서 숨겨지며, 운영자가 변경 기록에서 복구할 수 있습니다.</p>
+      <div class="modal-head">
+        <h3>이 기록을 삭제할까요?</h3>
+        <button class="secondary-button" :disabled="busy" @click="deleteTarget = null" aria-label="삭제 확인 닫기">×</button>
+      </div>
+      <div class="modal-body">
+      <p>목록에서 숨겨지며, 최고 관리자가 변경 기록에서 복구할 수 있습니다.</p>
       <div class="toolbar">
         <button
           class="primary-button"
@@ -922,6 +1119,7 @@
         ><button class="secondary-button" @click="deleteTarget = null">
           취소
         </button>
+      </div>
       </div>
     </section>
   </div>
@@ -938,6 +1136,8 @@ import {
 import { useRoute, useRouter } from "vue-router";
 import { request, save, remove, upload, imageBlob, exportAll } from "./api";
 import Portrait from "./Portrait.vue";
+import NotificationCenter from "./NotificationCenter.vue";
+import { notificationPath } from "./notificationRoutes.mjs";
 import { validateAttachments } from "./image.mjs";
 import MentionText from "./MentionText.vue";
 const RelationshipGraph = defineAsyncComponent(() =>
@@ -975,6 +1175,7 @@ const busy = ref(false),
   affValue = ref(0),
   affNote = ref(""),
   nickname = ref(""),
+  representativeId = ref(null),
   inviteEmail = ref(""),
   inviteName = ref("");
 let urls = [],
@@ -994,7 +1195,11 @@ const races = ["인간", "엘프", "드워프", "쿠나리"];
 const extraFields = [
   { key: "quote", label: "한 마디" },
   { key: "affiliation", label: "소속" },
-  { key: "circle_faction", label: "파벌", options: ["마탑 수호파", "중립", "자유파"] },
+  {
+    key: "circle_faction",
+    label: "파벌",
+    options: ["마탑 수호파", "중립", "자유파"],
+  },
   { key: "motivation", label: "마탑에 들어온 동기 / 결핍·콤플렉스" },
   { key: "appearance", label: "외관" },
   { key: "other", label: "기타 설정" },
@@ -1005,24 +1210,49 @@ const profileFields = [
   { key: "name", label: "이름" },
   { key: "affiliation", label: "소속", extra: true },
   { key: "race", label: "종족", options: races },
-  { ...extraFields.find(f => f.key === 'circle_faction'), extra: true },
-  { ...extraFields.find(f => f.key === 'motivation'), extra: true, long: true },
-  { ...extraFields.find(f => f.key === 'appearance'), extra: true, long: true },
+  { ...extraFields.find((f) => f.key === "circle_faction"), extra: true },
+  {
+    ...extraFields.find((f) => f.key === "motivation"),
+    extra: true,
+    long: true,
+  },
+  {
+    ...extraFields.find((f) => f.key === "appearance"),
+    extra: true,
+    long: true,
+  },
   { key: "personality", label: "성격 · 키워드 서술", long: true },
   { key: "other", label: "기타 설정", extra: true, long: true },
-  { key: "secrets", label: "비밀 설정 (캐릭터에게 비밀 · 오너끼리는 공유)", long: true },
-  { ...extraFields.find(f => f.key === 'relationship_direction'), extra: true, long: true },
-];
-const ownerFields = [
+  {
+    key: "secrets",
+    label: "비밀 설정 (캐릭터에게 비밀 · 오너끼리는 공유)",
+    long: true,
+  },
   { key: "age", label: "나이" },
   { key: "position", label: "직책·마탑 내 역할" },
   { key: "origin", label: "출신지" },
   { key: "background", label: "배경 이야기", long: true },
   { key: "goals", label: "목표와 가치관", long: true },
 ];
-function fieldValue(row, field) { return field.extra ? row.extra?.[field.key] || '' : row[field.key] || ''; }
-function setField(field, value) { if (field.extra) draft.value.extra[field.key] = value; else draft.value[field.key] = value; }
-const admin = computed(() => me.value?.role === "admin"),
+const ownerFields = [
+  {
+    ...extraFields.find((f) => f.key === "relationship_direction"),
+    extra: true,
+    long: true,
+  },
+];
+function fieldValue(row, field) {
+  return field.extra ? row.extra?.[field.key] || "" : row[field.key] || "";
+}
+function setField(field, value) {
+  if (field.extra) draft.value.extra[field.key] = value;
+  else draft.value[field.key] = value;
+}
+const representative = computed(() =>
+  byId(me.value?.representative_character_id),
+);
+const superAdmin = computed(() => me.value?.role === "superadmin");
+const admin = computed(() => ["admin", "superadmin"].includes(me.value?.role)),
   mine = computed(() =>
     characters.value.filter((c) => c.owner_id === me.value?.id),
   ),
@@ -1098,6 +1328,12 @@ function ownsId(id) {
 }
 function label(value) {
   return value === "mage" ? "마법사" : "템플러";
+}
+function roleLabel(role) { return {superadmin:'최고 관리자',admin:'관리자',member:'회원'}[role] || '회원'; }
+function canManageMember(member) { return member.id !== me.value?.id && member.role !== 'superadmin' && (superAdmin.value || member.role === 'member'); }
+async function changeMemberRole(member) {
+  await save('members', { ...member, role: member.role === 'admin' ? 'member' : 'admin' });
+  await refresh();
 }
 function statusLabel(s) {
   return { pending: "제안 중", approved: "승인됨", rejected: "거절됨" }[s];
@@ -1221,29 +1457,57 @@ function openMedia(characterId = "", postId = "") {
   modal.value = "media";
   error.value = "";
 }
-const existingPostImages = computed(() => media.value.filter(m => m.post_id === draft.value.id && !removedPostImages.value.includes(m.id)));
-const postImageCount = computed(() => existingPostImages.value.length + postFiles.value.length);
-const postImageSlots = computed(() => Array.from({length: 10}, (_, index) => [...existingPostImages.value, ...postFiles.value][index] || null));
+const existingPostImages = computed(() =>
+  media.value.filter(
+    (m) =>
+      m.post_id === draft.value.id && !removedPostImages.value.includes(m.id),
+  ),
+);
+const postImageCount = computed(
+  () => existingPostImages.value.length + postFiles.value.length,
+);
+const postImageSlots = computed(() =>
+  Array.from(
+    { length: 10 },
+    (_, index) =>
+      [...existingPostImages.value, ...postFiles.value][index] || null,
+  ),
+);
 function clearPostPreviews() {
-  postFiles.value.forEach(item => URL.revokeObjectURL(item.preview));
+  postFiles.value.forEach((item) => URL.revokeObjectURL(item.preview));
   postFiles.value = [];
 }
 function removePostImage(slot) {
   if (slot.file) {
     const index = postFiles.value.indexOf(slot);
-    if (index >= 0) { URL.revokeObjectURL(slot.preview); postFiles.value.splice(index, 1); }
-  } else { removedPostImages.value.push(slot.id); }
+    if (index >= 0) {
+      URL.revokeObjectURL(slot.preview);
+      postFiles.value.splice(index, 1);
+    }
+  } else {
+    removedPostImages.value.push(slot.id);
+  }
 }
 function selectPostImages(event) {
   try {
     const files = Array.from(event.target.files || []);
     validateAttachments(files, postImageCount.value);
-    postFiles.value.push(...files.map(file => ({ file, name: file.name, preview: URL.createObjectURL(file) })));
-    error.value = '';
-  } catch (e) { error.value = e.message; }
-  event.target.value = '';
+    postFiles.value.push(
+      ...files.map((file) => ({
+        file,
+        name: file.name,
+        preview: URL.createObjectURL(file),
+      })),
+    );
+    error.value = "";
+  } catch (e) {
+    error.value = e.message;
+  }
+  event.target.value = "";
 }
-watch(modal, (value, previous) => { if (previous === 'post' && value !== 'post') clearPostPreviews(); });
+watch(modal, (value, previous) => {
+  if (previous === "post" && value !== "post") clearPostPreviews();
+});
 async function submitDraft() {
   let table = {
     character: "characters",
@@ -1262,20 +1526,27 @@ async function submitDraft() {
     value.bytes = file.value.size;
     value.mime = file.value.type;
   }
-  if (table === "posts" && value.category === "art") validateAttachments([], postImageCount.value);
+  if (table === "posts" && value.category === "art")
+    validateAttachments([], postImageCount.value);
   const saved = await save(table, value);
   if (table === "posts") {
     draft.value = { ...saved, character_ids: [...saved.character_ids] };
     for (const imageId of [...removedPostImages.value]) {
       await remove("media", imageId);
-      media.value = media.value.filter(m => m.id !== imageId);
-      removedPostImages.value = removedPostImages.value.filter(id => id !== imageId);
+      media.value = media.value.filter((m) => m.id !== imageId);
+      removedPostImages.value = removedPostImages.value.filter(
+        (id) => id !== imageId,
+      );
     }
     while (postFiles.value.length) {
       const attachment = postFiles.value[0];
       attachment.path ||= await upload(attachment.file);
-      const attached = await save("media", { post_id: saved.id, path: attachment.path, caption: attachment.name });
-      const preview = await imageBlob(attached.path).catch(() => '');
+      const attached = await save("media", {
+        post_id: saved.id,
+        path: attachment.path,
+        caption: attachment.name,
+      });
+      const preview = await imageBlob(attached.path).catch(() => "");
       if (preview) urls.push(preview);
       media.value.push({ ...attached, image: preview });
       URL.revokeObjectURL(attachment.preview);
@@ -1355,7 +1626,10 @@ async function invite() {
 async function saveNickname() {
   me.value = await request("/profile", {
     method: "POST",
-    body: JSON.stringify({ nickname: nickname.value }),
+    body: JSON.stringify({
+      nickname: nickname.value,
+      representative_character_id: representativeId.value,
+    }),
   });
   await refresh();
 }
@@ -1383,7 +1657,13 @@ onMounted(async () => {
   try {
     me.value = await request("/me");
     nickname.value = me.value.nickname;
+    representativeId.value = me.value.representative_character_id || null;
     await refresh();
+    try {
+      const destination = notificationPath(sessionStorage.getItem('circle-notification-destination'));
+      sessionStorage.removeItem('circle-notification-destination');
+      if (destination) await router.replace(destination);
+    } catch { /* Session storage can be disabled in private browsing. */ }
     timer = setInterval(async () => {
       if (
         document.visibilityState === "visible" &&
@@ -1403,6 +1683,12 @@ onMounted(async () => {
     }, 60000);
   } catch (e) {
     error.value = e.message;
+    if (!me.value) {
+      try {
+        const destination = notificationPath(route.path);
+        if (destination) sessionStorage.setItem('circle-notification-destination', destination);
+      } catch { /* Keep the login screen usable if storage is disabled. */ }
+    }
   } finally {
     loading.value = false;
   }

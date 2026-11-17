@@ -647,7 +647,7 @@ a {
   color: var(--accent);
   font-size: 12px;
   font-weight: 600;
-  text-decoration: underline;
+  text-decoration: none;
   text-underline-offset: 2px;
 }
 .tracker-reminder-link:hover {

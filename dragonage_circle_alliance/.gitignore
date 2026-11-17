@@ -21,3 +21,6 @@ backups/
 *.log
 드에 자캐동맹.json
 client_secret*.json
+
+# Per-site push signing key (normally stored outside the repository)
+push-vapid.local.json

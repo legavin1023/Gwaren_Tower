@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {relationshipStatus,validateImage} from '../worker/policy.mjs';import {graphElements,mentionParts} from '../src/domain.mjs';
+import test from 'node:test';import assert from 'node:assert/strict';import {relationshipStatus,validateImage} from '../worker/policy.mjs';import {graphElements,mentionParts,commentCharacter} from '../src/domain.mjs';
 const a={id:'a',owner_id:'one'},b={id:'b',owner_id:'two'},admin={id:'root',role:'admin'},one={id:'one',role:'member'},two={id:'two',role:'member'},other={id:'other',role:'member'},r={id:'r',source_id:'a',target_id:'b',name:'비밀 동맹',kind:'동료',description:'공범',directed:false,status:'approved'};
 test('proposer cannot self-approve; recipient can approve',()=>{assert.throws(()=>relationshipStatus(one,{...r,status:'pending'},r,a,b));assert.equal(relationshipStatus(two,{...r,status:'pending'},r,a,b),'approved');});
 test('new cross-owner relation stays pending even with approved input',()=>assert.equal(relationshipStatus(one,null,r,a,b),'pending'));
@@ -8,3 +8,14 @@ test('unrelated owner and changed endpoints rejected',()=>{assert.throws(()=>rel
 test('graph ignores pending, removed and dangling relations',()=>{const cs=[{id:'a',name:'A',faction:'mage'},{id:'b',name:'B',faction:'templar'}];assert.equal(graphElements(cs,[r,{...r,id:'p',status:'pending'},{...r,id:'gone',target_id:'gone'}]).length,3);assert.equal(graphElements(cs,[r],'mage').length,1);assert.equal(graphElements(cs,[{...r,deleted_at:'now'}]).length,2);});
 test('mentions resolve only explicit IDs, including duplicate names',()=>{const id='00000000-0000-4000-8000-000000000001';assert.deepEqual(mentionParts('@[같은 이름]('+id+')',[{id,name:'이름 변경됨'}]),[{text:'이름 변경됨',id}]);assert.deepEqual(mentionParts('같은 이름',[{id,name:'같은 이름'}]),[{text:'같은 이름'}]);});
 test('reject HTML/SVG disguised as images',()=>{assert.throws(()=>validateImage(new TextEncoder().encode('<svg>'),'image/png'));assert.throws(()=>validateImage(new Uint8Array([1,2,3]),'image/svg+xml'));});
+
+test('comment avatar links explicit characters and owner representatives without changing comment authors',()=>{
+ const characters=[{id:'a',owner_id:'one'},{id:'b',owner_id:'one'},{id:'c',owner_id:'two'}];
+ const members=[{id:'one',representative_character_id:'b'}];
+ assert.equal(commentCharacter({owner_id:'one',character_id:'a'},characters,members)?.id,'a');
+ assert.equal(commentCharacter({owner_id:'one',character_id:null},characters,members)?.id,'b');
+ assert.equal(commentCharacter({owner_id:'one',character_id:'removed'},characters,members),null);
+ assert.equal(commentCharacter({owner_id:'one'},characters,[{id:'one',representative_character_id:'c'}]),null);
+ assert.equal(commentCharacter({owner_id:'one'},characters.map(c=>({...c,deleted_at:'now'})),members),null);
+ assert.equal(commentCharacter({owner_id:'one'},characters,[]),null);
+});
