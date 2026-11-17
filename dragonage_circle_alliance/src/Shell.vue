@@ -1446,12 +1446,12 @@ function date(s) {
 function postMedia(postId) {
   return media.value.filter((item) => item.post_id === postId);
 }
-// function categoryLabel(s) {
-//   return (
-//     { story: "썰 게시판", art: "그림·로그 보관함", notice: "공지" }[s] ||
-//     "게시판"
-//   );
-// }
+function categoryLabel(s) {
+  return (
+    { story: "썰 게시판", art: "그림·로그 보관함", notice: "공지" }[s] ||
+    "게시판"
+  );
+}
 async function act(fn) {
   if (busy.value) return;
   busy.value = true;
