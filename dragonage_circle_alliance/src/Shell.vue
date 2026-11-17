@@ -477,6 +477,18 @@
         <template v-else-if="route.path.startsWith('/board/')"
           ><template v-if="post"
             ><article class="card">
+              <header v-if="post.category === 'art'" class="art-detail-meta">
+                <h2>{{ post.title }}</h2>
+                <span class="art-meta-divider" aria-hidden="true">/</span>
+                <p class="art-detail-byline">{{ owner(post.owner_id) }} · <time :datetime="post.created_at">{{ date(post.created_at) }}</time></p>
+                <template v-if="post.character_ids.length">
+                  <span class="art-meta-divider" aria-hidden="true">/</span>
+                  <div class="art-detail-tags" role="group" aria-label="태그한 캐릭터">
+                    <router-link v-for="id in post.character_ids" :key="id" :to="'/characters/' + id" class="badge">{{ name(id) }}</router-link>
+                  </div>
+                </template>
+              </header>
+              <template v-else>
               <span class="eyebrow">{{ categoryLabel(post.category) }}</span>
               <h2>{{ post.title }}</h2>
               <p class="muted">
@@ -487,8 +499,9 @@
                 ><span v-else>{{ owner(post.owner_id) }}</span> ·
                 {{ date(post.created_at) }}
               </p>
+              </template>
               <MentionText :text="post.body" :characters="characters" />
-              <p>
+              <p v-if="post.category !== 'art' && post.character_ids.length">
                 <router-link
                   v-for="id in post.character_ids"
                   :key="id"

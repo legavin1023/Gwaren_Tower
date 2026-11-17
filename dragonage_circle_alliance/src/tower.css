@@ -334,3 +334,11 @@ input[type=checkbox],input[type=range] { accent-color: var(--accent); }
 .affection-profile-heading .outline-button {padding:6px 10px;font-size:12px;}
 @media(max-width:1000px) {.affection-filters{grid-template-columns:repeat(2,minmax(0,1fr));}.affection-pair{grid-template-columns:minmax(0,1fr) 24px minmax(0,1fr);gap:10px;}.affection-score{grid-column:1/-1;max-width:220px;margin-top:10px;}}
 @media(max-width:480px) {.affection-filters{grid-template-columns:1fr;}.affection-character{gap:7px;}.affection-character .portrait{width:36px;height:36px;font-size:16px;}.affection-character strong{font-size:14px;}.affection-direction{font-size:19px;}}
+
+.art-detail-meta {display:flex;align-items:center;flex-wrap:nowrap;gap:12px;max-width:100%;overflow-x:auto;margin-bottom:20px;padding:0 0 12px;border-bottom:1px solid var(--line);}
+.art-detail-meta h2 {flex:0 0 auto;margin:0;font-size:20px;line-height:1.5;white-space:nowrap;}
+.art-detail-byline {flex:0 0 auto;margin:0;color:var(--muted);font-size:13px;line-height:1.7;white-space:nowrap;}
+.art-meta-divider {flex:0 0 auto;color:var(--muted);font-size:14px;}
+.art-detail-tags {display:flex;flex:0 0 auto;align-items:center;gap:6px;white-space:nowrap;}
+.art-detail-tags .badge {margin:0;padding:3px 8px;font-size:12px;}
+@media(max-width:640px) {.art-detail-meta{gap:9px;}.art-detail-meta h2{font-size:18px;}.art-detail-byline{font-size:12px;}}
