@@ -507,3 +507,26 @@ input[type=checkbox],input[type=range] { accent-color: var(--accent); }
 .log-image-summary .log-row-title {margin-bottom:2px;}
 .log-image-summary .log-row-tags {margin-top:3px;}
 @media(max-width:600px){.log-text-link {grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;padding:10px 6px;}.log-text-link .log-row-title{grid-column:1/-1;}.log-text-link .log-row-date{font-size:11px;}.log-view-switch button{padding:7px 10px;font-size:12px;}}
+
+/* Natural-height masonry columns for log previews only. */
+.log-board .art-post-grid {display:block;columns:250px;column-gap:12px;}
+.log-board .art-post-grid .art-post-card {display:inline-block;vertical-align:top;width:100%;margin:0 0 12px;break-inside:avoid;page-break-inside:avoid;}
+.log-board .art-post-grid .image-slider-stage {display:block;aspect-ratio:auto;max-height:none;}
+.log-board .art-post-grid .image-slider-main {height:auto;}
+.log-board .art-post-grid .image-slider-main img {width:100%;height:auto;max-height:none;object-fit:contain;}
+.log-board .art-post-grid .art-preview-unavailable {display:block;padding:28px 12px;text-align:center;}
+.log-board .art-post-card .log-image-summary {padding:10px 12px;gap:3px;}
+.log-board .art-post-card .log-row-title {font-size:14px;line-height:1.5;margin-bottom:1px;}
+.log-board .art-post-card .image-slider-thumbs {gap:4px;padding:6px;}
+.log-board .art-post-card .image-slider-thumb {flex-basis:48px;width:48px;height:44px;}
+@media(max-width:600px){
+ .log-board .art-post-grid {column-count:2;column-width:auto;column-gap:8px;}
+ .log-board .art-post-grid .art-post-card {margin-bottom:8px;}
+ .log-board .art-post-card .log-image-summary {padding:8px;}
+ .log-board .art-post-card .log-row-title {font-size:13px;}
+ .log-board .art-post-card .log-row-author,.log-board .art-post-card .log-row-tags {font-size:11px;}
+ .log-board .art-post-card .log-row-date {font-size:10px;overflow-wrap:anywhere;}
+ .log-board .art-post-card .image-slider-arrow {width:26px;height:34px;font-size:23px;}
+ .log-board .art-post-card .image-slider-prev {left:4px;}.log-board .art-post-card .image-slider-next {right:4px;}
+}
+@media(max-width:340px){.log-board .art-post-grid {column-count:1;}}
