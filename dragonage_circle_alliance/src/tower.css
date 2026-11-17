@@ -342,3 +342,13 @@ input[type=checkbox],input[type=range] { accent-color: var(--accent); }
 .art-detail-tags {display:flex;flex:0 0 auto;align-items:center;gap:6px;white-space:nowrap;}
 .art-detail-tags .badge {margin:0;padding:3px 8px;font-size:12px;}
 @media(max-width:640px) {.art-detail-meta{gap:9px;}.art-detail-meta h2{font-size:18px;}.art-detail-byline{font-size:12px;}}
+
+.affection-list-compact {margin:18px 0 24px;}
+.affection-list-compact .affection-results-heading {margin-bottom:4px;}
+.affection-list-compact .affection-record {padding:16px 0;margin:0;border:0;border-bottom:1px solid var(--line);border-radius:0;background:none;box-shadow:none;}
+.affection-list-compact .affection-pair {grid-template-columns:minmax(0,1fr) 110px;gap:12px;}
+.affection-list-compact .affection-score {grid-column:auto;margin:0;max-width:none;}
+.affection-list-compact .affection-score>strong {font-size:21px;}
+.affection-list-compact .affection-character .portrait {width:40px;height:40px;}
+.affection-list-compact .affection-note {margin:12px 0 8px;font-size:13px;}
+.affection-list-compact .empty-state {padding:18px 0;text-align:left;font-size:13px;line-height:1.8;}

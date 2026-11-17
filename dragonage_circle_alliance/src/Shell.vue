@@ -228,6 +228,7 @@
               </section>
               <section class="card">
                 <div class="affection-profile-heading"><h3>♥ 호감도</h3><router-link to="/affection" class="outline-button">전체 목록</router-link></div>
+                <AffectionList :characters="characters" :affection="affection" :members="members" :me="me" :target-character-id="character.id" compact />
                 <p class="muted">
                   내 캐릭터가 {{ character.name }}에게 느끼는 감정
                 </p>
