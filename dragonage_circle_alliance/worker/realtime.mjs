@@ -41,7 +41,7 @@ export class RealtimeHub {
   const sockets=this.ctx.getWebSockets().filter(socket=>socket.readyState===1);
   if(change.revokeAll||change.revokeSession){for(const socket of sockets){const state=socket.deserializeAttachment();if(change.revokeAll||state?.sessionHash===change.revokeSession)socket.close(1008,'Session ended');}return;}
   const notificationMembers=new Set(change.notificationMembers||[]);
-  const relevant=sockets.filter(socket=>{const state=socket.deserializeAttachment();return state&&(change.data||notificationMembers.has(state.memberId));});
+  const relevant=sockets.filter(socket=>{const state=socket.deserializeAttachment();return state&&(change.data||change.roleplay||notificationMembers.has(state.memberId));});
   if(!relevant.length)return;
   // Validate active sessions only when a write actually occurs, never while idle.
   const hashes=[...new Set(relevant.map(socket=>socket.deserializeAttachment().sessionHash))],valid=new Set();
@@ -51,6 +51,7 @@ export class RealtimeHub {
    if(!valid.has(state.sessionHash)){socket.close(1008,'Session ended');continue;}
    if(change.actorClient&&state.memberId===change.actorMember&&state.clientId===change.actorClient)continue;
    const event={type:'changed',data:!!change.data,notifications:notificationMembers.has(state.memberId)};
+   if(change.roleplay)event.roleplay=true;
    try{socket.send(JSON.stringify(event));}catch{try{socket.close(1011,'Connection closed');}catch{}}
   }
  }

@@ -12,7 +12,7 @@ test('account controls link identity, toggle theme icons, emit logout, and retai
  try{
   for(const [name,sourceName] of [['account-portrait-'+process.pid,'Portrait'],['account-'+process.pid,'AccountControls']]){
    const {descriptor}=parse(await readFile(new URL('../src/'+sourceName+'.vue',import.meta.url),'utf8'));
-   const code=compileScript(descriptor,{id:name,inlineTemplate:true}).content.replaceAll("'./character-theme.mjs'","'../../src/character-theme.mjs'").replace("'./Portrait.vue'","'./account-portrait-"+process.pid+".mjs'");const file=new URL(name+'.mjs',folder);await writeFile(file,code);files.push(file);
+   const code=compileScript(descriptor,{id:name,inlineTemplate:true}).content.replaceAll('"./character-theme.mjs"', '"../../src/character-theme.mjs"').replaceAll("'./character-theme.mjs'","'../../src/character-theme.mjs'").replace("'./Portrait.vue'","'./account-portrait-"+process.pid+".mjs'");const file=new URL(name+'.mjs',folder);await writeFile(file,code);files.push(file);
   }
   const Controls=(await import(files[1].href)).default,dark=ref(false),busy=ref(false),compact=ref(false),representative=ref({id:'char-1',name:'에이라',faction:'mage'});let logout=0;
   const router=createRouter({history:createMemoryHistory(),routes:[{path:'/:pathMatch(.*)*',component:{render:()=>null}}]});await router.push('/home');

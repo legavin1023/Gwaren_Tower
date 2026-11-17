@@ -10,7 +10,7 @@ class D1 {
  async batch(stmts){this.db.exec('BEGIN');try{const out=stmts.map(s=>s.execute());this.db.exec('COMMIT');return out;}catch(e){this.db.exec('ROLLBACK');throw e;}}
 }
 class R2 {constructor(){this.objects=new Map();}async put(k,b,o){this.objects.set(k,{bytes:new Uint8Array(b),...o});}async get(k){const obj=this.objects.get(k);return obj?{size:obj.bytes.length,body:new Blob([obj.bytes]).stream(),httpMetadata:obj.httpMetadata,arrayBuffer:async()=>obj.bytes.buffer}:null;}async head(k){return this.get(k);}}
-async function fixture(){const env={SITE_ORIGIN:'https://circle.test',BOOTSTRAP_ADMIN_EMAIL:'root@example.test',BACKUP_TOKEN:'backup-test',RESTORE_TOKEN:'restore-test',DB:new D1((await readFile(new URL('../migrations/0001_circle.sql',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../migrations/0002_representative_character.sql',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../migrations/0003_notifications.sql',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../migrations/0004_character_questions.sql',import.meta.url),'utf8'))),MEDIA:new R2()};for(const [id,role]of [['one','member'],['two','member'],['root','admin']]){await env.DB.prepare('INSERT INTO members(id,email,nickname,role,active,created_at,updated_at) VALUES(?,?,?,?,1,?,?)').bind(id,id+'@example.test',id,role,new Date().toISOString(),new Date().toISOString()).run();await env.DB.prepare('INSERT INTO sessions(token_hash,member_id,expires_at) VALUES(?,?,?)').bind(digest(id),id,Date.now()+86400000).run();}return env;}
+async function fixture(){const env={SITE_ORIGIN:'https://circle.test',BOOTSTRAP_ADMIN_EMAIL:'root@example.test',BACKUP_TOKEN:'backup-test',RESTORE_TOKEN:'restore-test',DB:new D1((await readFile(new URL('../migrations/0001_circle.sql',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../migrations/0002_representative_character.sql',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../migrations/0003_notifications.sql',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../migrations/0004_character_questions.sql',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../migrations/0005_roleplay.sql',import.meta.url),'utf8'))),MEDIA:new R2()};for(const [id,role]of [['one','member'],['two','member'],['root','admin']]){await env.DB.prepare('INSERT INTO members(id,email,nickname,role,active,created_at,updated_at) VALUES(?,?,?,?,1,?,?)').bind(id,id+'@example.test',id,role,new Date().toISOString(),new Date().toISOString()).run();await env.DB.prepare('INSERT INTO sessions(token_hash,member_id,expires_at) VALUES(?,?,?)').bind(digest(id),id,Date.now()+86400000).run();}return env;}
 async function call(env,path,user='one',method='GET',body,headers={}){const request=new Request(env.SITE_ORIGIN+'/api'+path,{method,headers:{Origin:env.SITE_ORIGIN,...(user?{Cookie:'circle_session='+user}:{}),'Content-Type':'application/json',...headers},...(body!==undefined?{body:typeof body==='string'||body instanceof Uint8Array?body:JSON.stringify(body)}:{})});const response=await worker.fetch(request,env);let data;if(response.headers.get('Content-Type')?.includes('json'))data=await response.json();return {status:response.status,data,response};}
 test('real SQLite: invite gate, ownership, directional affection, approval, comments, media, soft delete, revision restore',async()=>{
  const env=await fixture();try{
@@ -40,7 +40,8 @@ test('real SQLite: invite gate, ownership, directional affection, approval, comm
  assert.equal((await call(env,'/media','two','POST',{path:upload.path})).status,403);
  assert.equal((await call(env,'/media','one','POST',{path:upload.path,character_id:a.id})).status,200);
  assert.equal((await call(env,'/characters/'+b.id,'one','DELETE')).status,403);
- assert.equal((await call(env,'/characters/'+b.id,'two','DELETE')).status,200);
+ assert.equal((await call(env,'/characters/'+b.id,'two','DELETE')).status,403);
+ assert.equal((await call(env,'/characters/'+b.id,'root','DELETE')).status,200);
  const data=(await call(env,'/data')).data;assert.equal(data.characters.length,1);assert.equal(data.comments[0].character_id,b.id);assert.equal(data.affection.length,2);
  const h=(await call(env,'/history','root')).data.find(h=>h.action==='delete'&&h.record_id===b.id);assert.equal((await call(env,'/history/'+h.id+'/restore','root','POST',{})).status,200);assert.equal((await call(env,'/data')).data.characters.length,2);
  await call(env,'/members','root','POST',{id:'two',email:'two@example.test',nickname:'two',active:false,role:'member'});
@@ -48,6 +49,201 @@ test('real SQLite: invite gate, ownership, directional affection, approval, comm
  const cross=await call(env,'/characters','one','POST',{name:'CSRF',faction:'mage'},{Origin:'https://evil.test'});assert.equal(cross.status,403);
  }finally{env.DB.db.close();}
 });
+test('roleplay timeline supports multiple owners, replies to replies, OOC, immutable authors, revisions and idempotent sends',async()=>{
+ const env=await fixture();try{
+ const a=(await call(env,'/characters','one','POST',{name:'마법사 A',faction:'mage'})).data;
+ const b=(await call(env,'/characters','two','POST',{name:'템플러 B',faction:'templar'})).data;
+ const c=(await call(env,'/characters','one','POST',{name:'두 번째 캐릭터',faction:'templar'})).data;
+ const send=(user,body)=>call(env,'/roleplay/messages',user,'POST',{request_id:crypto.randomUUID(),...body});
+ assert.equal((await send(null,{character_id:a.id,body:'비회원'})).status,401);
+ assert.equal((await send('one',{character_id:b.id,body:'대리 작성'})).status,403);
+ const key=crypto.randomUUID(),first=await send('one',{request_id:key,character_id:a.id,body:'"안녕"\n*창가를 본다.*'});assert.equal(first.status,200);
+ const root=first.data;assert.equal(root.thread_id,root.id);assert.equal(root.author_name,a.name);
+ const duplicate=await send('one',{request_id:key,character_id:a.id,body:root.body});assert.equal(duplicate.data.id,root.id);
+ const concurrentKey=crypto.randomUUID();const concurrent=await Promise.all([send('one',{request_id:concurrentKey,body:'동시 전송'}),send('one',{request_id:concurrentKey,body:'동시 전송'})]);
+ assert.equal(concurrent[0].status,200);assert.equal(concurrent[0].data.id,concurrent[1].data.id);
+ const reply=(await send('two',{character_id:b.id,parent_id:root.id,body:'답글'})).data;
+ const nested=(await send('one',{character_id:c.id,parent_id:reply.id,body:'답글에 답글'})).data;
+ assert.equal(nested.parent_id,reply.id);assert.equal(nested.thread_id,root.id);assert.equal(nested.character_id,c.id);
+ const ooc=(await send('one',{parent_id:nested.id,body:'내일 이어가요'})).data;assert.equal(ooc.character_id,null);
+ assert.equal((await call(env,'/roleplay/messages','two','POST',{...root,body:'무단 수정'})).status,403);
+ assert.equal((await call(env,'/roleplay/messages','one','POST',{...root,character_id:c.id,body:'작성자 변경'})).status,400);
+ const changed=await call(env,'/roleplay/messages','one','POST',{id:root.id,revision:root.revision,body:'수정 본문'});assert.equal(changed.status,200);
+ assert.equal((await call(env,'/roleplay/messages','one','POST',{id:root.id,revision:root.revision,body:'오래된 수정'})).status,409);
+ await call(env,'/characters','one','POST',{...a,name:'새 이름'});
+ const sync=(await call(env,'/roleplay/sync')).data;
+ assert.equal(sync.messages.length,5);assert.equal(sync.messages.find(row=>row.id===root.id).character_id,a.id);
+ assert.equal(sync.messages.find(row=>row.id===root.id).author_name,'마법사 A');
+ assert.equal((await call(env,'/roleplay/sync?cursor='+sync.cursor)).data.messages.length,0);
+ const notifications=(await call(env,'/notifications','one')).data.items;assert.ok(notifications.some(row=>row.url==='#/roleplay/thread/'+root.id));
+ assert.equal((await call(env,'/roleplay/messages/'+root.id,'one','DELETE',undefined,{'X-Revision':String(changed.data.revision)})).status,200);
+ const removed=(await call(env,'/roleplay/sync?cursor='+sync.cursor)).data.messages.find(row=>row.id===root.id);assert.ok(removed.deleted_at);assert.equal(removed.body,'');assert.deepEqual(removed.attachments,[]);
+ const exported=await call(env,'/roleplay/export?thread='+root.id+'&ooc=hide');const log=await exported.response.text();assert.match(log,/답글에 답글/);assert.doesNotMatch(log,/내일 이어가요/);
+ const data=(await call(env,'/data')).data;assert.equal(data.relationships.length,0);assert.equal(data.affection.length,0);assert.equal(data.rp_messages,undefined);
+ }finally{env.DB.db.close();}
+});
+
+test('roleplay private scenes enforce read, speaking and image permissions including revocation and explicit admin access',async()=>{
+ const env=await fixture();try{
+ const a=(await call(env,'/characters','one','POST',{name:'A',faction:'mage'})).data,b=(await call(env,'/characters','two','POST',{name:'B',faction:'templar'})).data,c=(await call(env,'/characters','root','POST',{name:'C',faction:'mage'})).data;
+ let scene=(await call(env,'/roleplay/scenes','one','POST',{title:'비공개 도서관',visibility:'participants',join_policy:'invite',participant_ids:[a.id,b.id]})).data;
+ const send=(user,body)=>call(env,'/roleplay/messages',user,'POST',{request_id:crypto.randomUUID(),scene_id:scene.id,...body});
+ assert.equal((await call(env,'/roleplay/sync','root')).data.scenes.length,0);
+ assert.equal((await call(env,'/roleplay/scenes/'+scene.id+'/history','root')).status,404);
+ assert.equal((await call(env,'/roleplay/export?scene='+scene.id,'root')).status,404);
+ assert.equal((await send('root',{character_id:c.id,body:'몰래 발언'})).status,404);
+ const bytes=new TextEncoder().encode('RIFF0000WEBPVP8 test');
+ const image=await call(env,'/roleplay/upload?scene='+scene.id,'one','POST',bytes,{'Content-Type':'image/webp'});assert.equal(image.status,200);
+ assert.equal((await call(env,'/files/'+encodeURIComponent(image.data.path),'root')).status,404);
+ assert.equal((await call(env,'/files/'+encodeURIComponent(image.data.path),'two')).status,200);
+ const root=(await send('one',{character_id:a.id,body:'비밀 대화',attachments:[image.data.path]})).data;
+ assert.equal((await send('two',{character_id:b.id,body:'답글',parent_id:root.id})).status,200);
+ assert.equal((await call(env,'/roleplay/messages','one','POST',{request_id:crypto.randomUUID(),body:'비공개 첨부를 타임라인에 재사용',attachments:[image.data.path]})).status,403);
+ const outsiderCursor=(await call(env,'/roleplay/sync','root')).data.cursor;
+ scene=(await call(env,'/roleplay/scenes/'+scene.id+'/invite','two','POST',{id:scene.id,revision:scene.revision,participant_ids:[c.id]})).data;
+ assert.ok((await call(env,'/roleplay/sync?cursor='+outsiderCursor,'root')).data.newly_visible.includes(scene.id));
+ assert.equal((await call(env,'/roleplay/scenes/'+scene.id+'/history','root')).data.messages.length,2);
+ assert.equal((await send('root',{character_id:c.id,body:'세 번째 참여자'})).status,200);
+ const sceneBefore=scene;
+ scene=(await call(env,'/roleplay/scenes','one','POST',{...scene,participant_ids:[a.id,b.id]})).data;
+ assert.equal((await call(env,'/files/'+encodeURIComponent(image.data.path),'root')).status,404);
+ assert.equal((await call(env,'/roleplay/sync','root')).data.messages.length,0);
+ assert.equal((await call(env,'/roleplay/scenes','one','POST',{...sceneBefore,title:'오래된 수정'})).status,409);
+ scene=(await call(env,'/roleplay/scenes','one','POST',{...scene,admin_ids:['root']})).data;
+ assert.equal((await call(env,'/roleplay/scenes/'+scene.id+'/history','root')).status,200);
+ assert.equal((await send('root',{character_id:c.id,body:'운영자도 미참여면 발언 불가'})).status,403);
+ assert.equal((await call(env,'/roleplay/messages','root','POST',{id:root.id,revision:root.revision,body:'타인의 글 수정'})).status,403);
+ const prefs=await call(env,'/roleplay/preferences','two','POST',{mode:'off'});assert.equal(prefs.status,200);
+ const before=(await env.DB.prepare("SELECT COUNT(*) n FROM notifications WHERE member_id='two'").first()).n;
+ await send('one',{character_id:a.id,body:'알림 끈 참여자',parent_id:root.id});
+ assert.equal((await env.DB.prepare("SELECT COUNT(*) n FROM notifications WHERE member_id='two'").first()).n,before);
+ assert.equal((await call(env,'/roleplay/read','two','POST',{message_id:root.id})).status,200);
+ assert.equal((await call(env,'/roleplay/sync','two')).data.reads.length,1);
+ const exported=await call(env,'/roleplay/export?scene='+scene.id+'&format=html','two');assert.equal(exported.status,200);assert.match(await exported.response.text(),/비밀 대화/);
+ assert.equal((await call(env,'/roleplay/scenes/'+scene.id,'one','DELETE',undefined,{'X-Revision':String(scene.revision)})).status,200);
+ assert.equal((await call(env,'/files/'+encodeURIComponent(image.data.path),'two')).status,404);
+ assert.ok((await env.DB.prepare('SELECT deleted_at FROM rp_scenes WHERE id=?').bind(scene.id).first()).deleted_at);
+ assert.equal((await env.DB.prepare('SELECT COUNT(*) n FROM rp_messages').first()).n,4);
+ }finally{env.DB.db.close();}
+});
+
+test('roleplay public reading is separate from participation; ended scenes retain messages and can reopen',async()=>{
+ const env=await fixture();try{
+ const a=(await call(env,'/characters','one','POST',{name:'A',faction:'mage'})).data,b=(await call(env,'/characters','two','POST',{name:'B',faction:'templar'})).data;
+ let scene=(await call(env,'/roleplay/scenes','one','POST',{title:'전체 공개 초대 장면',visibility:'members',join_policy:'invite',participant_ids:[a.id]})).data;
+ const post=()=>call(env,'/roleplay/messages','two','POST',{request_id:crypto.randomUUID(),scene_id:scene.id,character_id:b.id,body:'참여'});
+ assert.equal((await call(env,'/roleplay/sync','two')).data.scenes.length,1);assert.equal((await post()).status,403);
+ assert.equal((await call(env,'/roleplay/scenes/'+scene.id+'/join','two','POST',{id:scene.id,revision:scene.revision,character_id:b.id})).status,403);
+ scene=(await call(env,'/roleplay/scenes','one','POST',{...scene,join_policy:'open'})).data;
+ assert.equal((await call(env,'/roleplay/scenes/'+scene.id+'/join','one','POST',{id:scene.id,revision:scene.revision,character_id:b.id})).status,403);
+ scene=(await call(env,'/roleplay/scenes/'+scene.id+'/join','two','POST',{id:scene.id,revision:scene.revision,character_id:b.id})).data;
+ const message=(await post()).data;assert.equal(message.character_id,b.id);
+ scene=(await call(env,'/roleplay/scenes','one','POST',{...scene,status:'ended'})).data;
+ assert.equal((await post()).status,400);
+ assert.equal((await call(env,'/roleplay/messages','two','POST',{id:message.id,revision:message.revision,body:'종료 후 오타 수정'})).status,200);
+ scene=(await call(env,'/roleplay/scenes','one','POST',{...scene,status:'active'})).data;assert.equal((await post()).status,200);
+ const snapshot=(await call(env,'/backup/snapshot',null,'GET',undefined,{Authorization:'Bearer backup-test'})).data;
+ assert.equal(snapshot.tables.rp_scenes.length,1);assert.equal(snapshot.tables.rp_messages.length,2);assert.ok(snapshot.tables.history.some(row=>row.table_name==='rp_messages'));
+ assert.equal(snapshot.tables.relationships.length,0);assert.equal(snapshot.tables.affection.length,0);
+ }finally{env.DB.db.close();}
+});
+
+test('roleplay history permissions, safe HTML exports, mention/invite preferences and backup restoration remain durable',async()=>{
+ const env=await fixture(),fresh=await fixture();try{
+ const a=(await call(env,'/characters','one','POST',{name:'A',faction:'mage'})).data,b=(await call(env,'/characters','two','POST',{name:'B',faction:'templar'})).data;
+ await call(env,'/roleplay/preferences','two','POST',{mode:'mentions'});
+ let scene=(await call(env,'/roleplay/scenes','one','POST',{title:'비공개 기록',visibility:'participants',join_policy:'invite',participant_ids:[a.id]})).data;
+ scene=(await call(env,'/roleplay/scenes/'+scene.id+'/invite','one','POST',{id:scene.id,revision:scene.revision,participant_ids:[b.id]})).data;
+ assert.ok((await env.DB.prepare("SELECT * FROM notifications WHERE member_id='two'").all()).results.some(row=>row.title.includes('초대')));
+ const bytes=new TextEncoder().encode('RIFF0000WEBPVP8 test');
+ const image=(await call(env,'/roleplay/upload?scene='+scene.id,'one','POST',bytes,{'Content-Type':'image/webp'})).data;
+ let message=(await call(env,'/roleplay/messages','one','POST',{request_id:crypto.randomUUID(),scene_id:scene.id,character_id:a.id,body:'<script>alert(1)</script> @['+b.name+']('+b.id+')',attachments:[image.path]})).data;
+ const notificationCount=(await env.DB.prepare("SELECT COUNT(*) n FROM notifications WHERE member_id='two'").first()).n;assert.equal(notificationCount,2);
+ message=(await call(env,'/roleplay/messages','one','POST',{id:message.id,revision:message.revision,body:'수정된 본문'})).data;
+ const history=(await env.DB.prepare("SELECT * FROM history WHERE table_name='rp_messages' AND action='update'").all()).results[0];
+ assert.equal((await call(env,'/history','root')).data.some(row=>row.id===history.id),false);
+ assert.equal((await call(env,'/history/'+history.id+'/restore','root','POST',{})).status,403);
+ scene=(await call(env,'/roleplay/scenes','one','POST',{...scene,admin_ids:['root']})).data;
+ assert.equal((await call(env,'/history/'+history.id+'/restore','root','POST',{})).status,200);
+ const output=await call(env,'/roleplay/export?scene='+scene.id+'&format=html','two');const html=await output.response.text();assert.match(html,/&lt;script&gt;/);assert.doesNotMatch(html,/<script>/);
+ const snapshot=(await call(env,'/backup/snapshot',null,'GET',undefined,{Authorization:'Bearer backup-test'})).data;
+ assert.equal((await call(fresh,'/backup/restore-file',null,'POST',bytes,{Authorization:'Bearer restore-test','Content-Type':'image/webp','X-Object-Key':image.path,'X-Sha256':digest(bytes)})).status,200);
+ assert.equal((await call(fresh,'/backup/restore',null,'POST',snapshot,{Authorization:'Bearer restore-test'})).status,200);
+ assert.equal((await fresh.DB.prepare('SELECT COUNT(*) n FROM rp_messages').first()).n,1);
+ assert.equal((await fresh.DB.prepare('SELECT COUNT(*) n FROM rp_assets').first()).n,1);
+ assert.equal((await fresh.DB.prepare("SELECT mode FROM rp_preferences WHERE id='two'").first()).mode,'mentions');
+ await fresh.DB.prepare('INSERT INTO sessions(token_hash,member_id,expires_at) VALUES(?,?,?)').bind(digest('two'),'two',Date.now()+86400000).run();
+ assert.equal((await call(fresh,'/files/'+encodeURIComponent(image.path),'two')).status,200);
+ assert.equal((await call(fresh,'/roleplay/sync','two')).data.messages.length,1);
+ }finally{env.DB.db.close();fresh.DB.db.close();}
+});
+
+test('roleplay incremental API bounds change pages and catches up without missing or duplicating records',async()=>{
+ const env=await fixture();try{
+ const at=new Date().toISOString();
+ for(let i=0;i<205;i++) {
+  const id='rp-'+String(i).padStart(4,'0');
+  await env.DB.batch([
+   env.DB.prepare('INSERT INTO rp_messages(id,owner_id,thread_id,author_name,body,request_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)').bind(id,'one',id,'one','message '+i,'request-'+i,at,at),
+   env.DB.prepare('INSERT INTO rp_changes(record_type,record_id,created_at) VALUES(?,?,?)').bind('rp_messages',id,at),
+  ]);
+ }
+ const first=(await call(env,'/roleplay/sync')).data;assert.equal(first.messages.length,200);assert.equal(first.has_more,true);
+ const second=(await call(env,'/roleplay/sync?cursor='+first.cursor)).data;assert.equal(second.messages.length,5);assert.equal(second.has_more,false);
+ assert.equal(new Set([...first.messages,...second.messages].map(row=>row.id)).size,205);
+ assert.equal((await call(env,'/roleplay/sync?cursor='+second.cursor)).data.messages.length,0);
+ assert.equal((await call(env,'/roleplay/sync?cursor=-1')).status,400);
+ }finally{env.DB.db.close();}
+});
+
+test('character deletion is reserved for admins while owners retain profile editing',async()=>{
+ const env=await fixture();try{
+ const character=(await call(env,'/characters','one','POST',{name:'보호할 캐릭터',faction:'mage'})).data;
+ assert.equal((await call(env,'/characters/'+character.id,'one','DELETE')).status,403);
+ assert.equal((await call(env,'/characters/'+character.id,'two','DELETE')).status,403);
+ const edited=await call(env,'/characters','one','POST',{...character,name:'오너가 수정'});
+ assert.equal(edited.status,200);
+ assert.equal((await call(env,'/data')).data.characters.find(row=>row.id===character.id).name,'오너가 수정');
+ await env.DB.prepare("UPDATE members SET role='admin' WHERE id='two'").run();
+ assert.equal((await call(env,'/characters/'+character.id,'two','DELETE')).status,200);
+ assert.equal((await call(env,'/data')).data.characters.some(row=>row.id===character.id),false);
+ }finally{env.DB.db.close();}
+});
+
+test('portrait changes retain images, support reuse and deletion, and enforce ownership and revisions',async()=>{
+ const env=await fixture();try{
+ const bytes=new TextEncoder().encode('RIFF0000WEBPVP8 test');
+ const upload=async user=>(await call(env,'/upload',user,'POST',bytes,{'Content-Type':'image/webp'})).data.path;
+ const first=await upload('one'),second=await upload('one'),foreign=await upload('two');
+ let character=(await call(env,'/characters','one','POST',{name:'이미지 이력',faction:'mage',image_path:first,extra:{theme_color:'#397e81'}})).data;
+ assert.deepEqual(character.extra.portrait_history.map(image=>image.path),[first]);
+ const stale=structuredClone(character);
+ character=(await call(env,'/characters','one','POST',{...character,image_path:second})).data;
+ assert.equal(character.image_path,second);
+ assert.deepEqual(new Set(character.extra.portrait_history.map(image=>image.path)),new Set([first,second]));
+ assert.equal(character.extra.theme_color,'#397e81');
+ assert.equal((await call(env,'/characters','one','POST',{...stale,image_path:first})).status,409);
+ assert.equal((await call(env,'/characters','two','POST',{...character,image_path:foreign})).status,403);
+ assert.equal((await call(env,'/characters','one','POST',{...character,extra:{portrait_history:[{path:foreign}]}})).status,403);
+ assert.equal((await call(env,'/characters','one','POST',{...character,extra:{portrait_history:'invalid'}})).status,400);
+ character=(await call(env,'/characters','one','POST',{...character,image_path:first})).data;
+ assert.equal(character.image_path,first);assert.equal(character.extra.portrait_history.length,2);
+ character=(await call(env,'/characters','one','POST',{...character,extra:{...character.extra,portrait_history:character.extra.portrait_history.filter(image=>image.path!==second)}})).data;
+ assert.deepEqual(character.extra.portrait_history.map(image=>image.path),[first]);
+ character=(await call(env,'/characters','one','POST',{...character,image_path:null,extra:{...character.extra,portrait_history:[]}})).data;
+ assert.equal(character.image_path,null);assert.deepEqual(character.extra.portrait_history,[]);
+ // Legacy profiles gain history when their image is replaced.
+ await env.DB.prepare('UPDATE characters SET image_path=?,extra=? WHERE id=?').bind(first,'{}',character.id).run();
+ character=(await call(env,'/characters','one','POST',{id:character.id,revision:character.revision,image_path:second})).data;
+ assert.deepEqual(new Set(character.extra.portrait_history.map(image=>image.path)),new Set([first,second]));
+ // Removing the current image while uploading a replacement must not resurrect it.
+ character=(await call(env,'/characters','one','POST',{...character,image_path:first,extra:{portrait_history:[]}})).data;
+ assert.deepEqual(character.extra.portrait_history.map(image=>image.path),[first]);
+ const loaded=(await call(env,'/data')).data.characters.find(row=>row.id===character.id);
+ assert.deepEqual(loaded.extra.portrait_history,character.extra.portrait_history);
+ }finally{env.DB.db.close();}
+});
+
 test('snapshot + R2 restore roundtrip, read-only backup key and rollback on invalid DB',async()=>{
  const env=await fixture(),fresh=await fixture();try{
  const a=(await call(env,'/characters','one','POST',{name:'보존된 캐릭터',faction:'mage',secrets:'비밀',extra:{습관:'독서',circle_faction:'중립',quote:'한 마디',other:'기타 설정',relationship_direction:'동료'}})).data;
@@ -110,7 +306,7 @@ test('representative character is saved per member, protected by ownership, and 
   } finally {restored.DB.db.close();}
 
   assert.equal((await call(env,'/profile','one','POST',{nickname:'오너',representative_character_id:null})).data.representative_character_id,null);
-  await call(env,'/characters/'+own.id,'one','DELETE');
+  await call(env,'/characters/'+own.id,'root','DELETE');
   assert.equal((await call(env,'/profile','one','POST',{nickname:'오너',representative_character_id:own.id})).status,400);
  } finally {env.DB.db.close();}
 });

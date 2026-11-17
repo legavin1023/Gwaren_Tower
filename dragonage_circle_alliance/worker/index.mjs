@@ -1,4 +1,6 @@
 import {questionRecord} from './questions.mjs';
+import {roleplayRoute, roleplayTables, authorizeRoleplayFile,filterRoleplayHistory,restoreRoleplayHistory} from './roleplay.mjs';
+import {portraitHistory} from './portrait-history.mjs';
 import {openRealtime,publishRealtime,requestClient} from './realtime.mjs';
 export {RealtimeHub} from './realtime.mjs';
 import { prepareNotifications, notificationStatement, sendNotifications, notificationRoute } from './notifications.mjs';
@@ -66,7 +68,7 @@ async function saveRecord(env,me,table,input,restore=false,ctx,clientId=''){
   if(row.extra.recruitment_status!=null&&!['','open','specific','closed'].includes(row.extra.recruitment_status))fail('자관 모집 상태를 확인하세요.');
   if(row.extra.recruitment_note!=null&&(typeof row.extra.recruitment_note!=='string'||row.extra.recruitment_note.length>500))fail('모집 내용은 500자 이내로 입력하세요.');
   if(row.extra.recruitment_status==='specific'&&!row.extra.recruitment_note?.trim())fail('모집 중인 특정 관계를 입력하세요.');
-  if(row.image_path){const image=await env.DB.prepare('SELECT * FROM uploads WHERE path=?').bind(row.image_path).first();if(!image||image.owner_id!==row.owner_id)fail('본인이 업로드한 프로필 이미지를 선택하세요.',403);}
+  row.extra.portrait_history=await portraitHistory(old,row,path=>env.DB.prepare('SELECT * FROM uploads WHERE path=?').bind(path).first());
  }
  if(['affection','relationships'].includes(table)){
   const source=await live(env,row.source_id),target=await live(env,row.target_id);if(source.id===target.id)fail('서로 다른 캐릭터를 선택하세요.');
@@ -104,7 +106,7 @@ async function saveRecord(env,me,table,input,restore=false,ctx,clientId=''){
  return table==='members'?memberView(env,row):row;
 }
 async function snapshot(env){
- const names=[...tables,'uploads','history','backup_runs','notifications'];const results=await env.DB.batch(names.map(t=>env.DB.prepare('SELECT * FROM '+t+' ORDER BY created_at,'+(t==='uploads'?'path':'id'))));return {format:'circle-cloudflare-v1',exported_at:now(),tables:Object.fromEntries(names.map((t,i)=>[t,results[i].results]))};
+ const names=[...tables,...roleplayTables,'uploads','history','backup_runs','notifications'];const results=await env.DB.batch(names.map(t=>env.DB.prepare('SELECT * FROM '+t+' ORDER BY created_at,'+(['uploads','rp_assets'].includes(t)?'path':'id'))));return {format:'circle-cloudflare-v1',exported_at:now(),tables:Object.fromEntries(names.map((t,i)=>[t,results[i].results]))};
 }
 async function backupAuthorized(req,env,restore=false){const expected=restore?env.RESTORE_TOKEN:env.BACKUP_TOKEN;if(!expected||!req.headers.get('Authorization')||await hash(req.headers.get('Authorization'))!==await hash('Bearer '+expected))fail('백업 인증에 실패했습니다.',403);}
 async function backupRoute(req,env,path,ctx){
@@ -116,10 +118,10 @@ async function backupRoute(req,env,path,ctx){
  }
  if(path==='/backup/restore'&&req.method==='POST'){
   await backupAuthorized(req,env,true);const b=await req.json();if(b.format!=='circle-cloudflare-v1')fail('잘못된 백업 형식');
-  const names=[...tables.filter(t=>t!=='questions'||Array.isArray(b.tables?.questions)),'uploads','history',...(Array.isArray(b.tables?.backup_runs)?['backup_runs']:[]),...(Array.isArray(b.tables?.notifications)?['notifications']:[])];for(const t of names)if(!Array.isArray(b.tables?.[t]))fail('불완전한 백업: '+t);
+  const names=[...tables.filter(t=>t!=='questions'||Array.isArray(b.tables?.questions)),...roleplayTables.filter(t=>Array.isArray(b.tables?.[t])),'uploads','history',...(Array.isArray(b.tables?.backup_runs)?['backup_runs']:[]),...(Array.isArray(b.tables?.notifications)?['notifications']:[])];for(const t of names)if(!Array.isArray(b.tables?.[t]))fail('불완전한 백업: '+t);
   for(const u of b.tables.uploads){const obj=await env.MEDIA.head(u.path);if(!obj||obj.size!==u.bytes)fail('이미지 원본을 먼저 복구하세요: '+u.path);}
   const statements=[env.DB.prepare('PRAGMA defer_foreign_keys=ON')];
-  for(const t of names){const schema=await env.DB.prepare('PRAGMA table_info('+t+')').all();const allowed=new Set(schema.results.map(c=>c.name));for(const row of b.tables[t]){const keys=Object.keys(row);if(!keys.length||keys.some(k=>!allowed.has(k)))fail('잘못된 백업 필드');statements.push(env.DB.prepare(`INSERT INTO ${t} (${keys.join(',')}) VALUES (${keys.map(()=>'?').join(',')}) ON CONFLICT(${t==='uploads'?'path':'id'}) DO UPDATE SET ${keys.map(k=>`${k}=excluded.${k}`).join(',')}`).bind(...keys.map(k=>row[k])));}}
+  for(const t of names){const schema=await env.DB.prepare('PRAGMA table_info('+t+')').all();const allowed=new Set(schema.results.map(c=>c.name));for(const row of b.tables[t]){const keys=Object.keys(row);if(!keys.length||keys.some(k=>!allowed.has(k)))fail('잘못된 백업 필드');statements.push(env.DB.prepare(`INSERT INTO ${t} (${keys.join(',')}) VALUES (${keys.map(()=>'?').join(',')}) ON CONFLICT(${['uploads','rp_assets'].includes(t)?'path':'id'}) DO UPDATE SET ${keys.map(k=>`${k}=excluded.${k}`).join(',')}`).bind(...keys.map(k=>row[k])));}}
   // Supplied snapshot is trusted only after explicit restore-token authentication.
   statements.push(env.DB.prepare('DELETE FROM sessions'),env.DB.prepare('DELETE FROM push_subscriptions'));await env.DB.batch(statements);await publishRealtime(env,{revokeAll:true},ctx);return json({ok:true});
  }
@@ -134,6 +136,7 @@ export default {async fetch(req,env,ctx){
   if(path.startsWith('/auth/'))return await auth(req,env,path,ctx);
   const me=await session(req,env);
   if(path==='/me')return json(me);
+  if(path.startsWith('/roleplay/'))return await roleplayRoute(req,env,me,ctx);
   if(path==='/live')return await openRealtime(req,env,me,await hash(cookie(req,'circle_session')));
   if(path.startsWith('/notifications')||path.startsWith('/push/'))return await notificationRoute(req,env,path,me,await hash(cookie(req,'circle_session')),ctx);
   if(path==='/data'&&req.method==='GET'){
@@ -153,15 +156,16 @@ export default {async fetch(req,env,ctx){
    if(representative){const character=await live(env,representative);if(character.owner_id!==me.id)fail('본인의 캐릭터만 대표 캐릭터로 선택할 수 있습니다.',403);}
    await env.DB.prepare('UPDATE members SET nickname=?,representative_character_id=?,updated_at=?,revision=revision+1 WHERE id=?').bind(nickname,representative??null,now(),me.id).run();await publishRealtime(env,{data:true,actorMember:me.id,actorClient:requestClient(req)},ctx);return json(memberView(env,await get(env,'members',me.id)));
   }
-  if(path==='/history'&&req.method==='GET'){requireSuperAdmin(me);return json((await env.DB.prepare('SELECT * FROM history ORDER BY created_at DESC LIMIT 200').all()).results);}
-  if(/^\/history\/[^/]+\/restore$/.test(path)&&req.method==='POST'){requireSuperAdmin(me);const h=await env.DB.prepare('SELECT * FROM history WHERE id=?').bind(path.split('/')[2]).first();if(!h?.before_json)fail('복구할 이전 기록이 없습니다.');const before=JSON.parse(h.before_json);delete before.revision;return json(await saveRecord(env,me,h.table_name,before,true,ctx,requestClient(req)));}
-  if(path.startsWith('/files/')&&req.method==='GET')return await serveFile(env,decodeURIComponent(path.slice(7)));
+  if(path==='/history'&&req.method==='GET'){requireSuperAdmin(me);return json(await filterRoleplayHistory(env,me,(await env.DB.prepare('SELECT * FROM history ORDER BY created_at DESC LIMIT 200').all()).results));}
+  if(/^\/history\/[^/]+\/restore$/.test(path)&&req.method==='POST'){requireSuperAdmin(me);const h=await env.DB.prepare('SELECT * FROM history WHERE id=?').bind(path.split('/')[2]).first();if(!h?.before_json)fail('복구할 이전 기록이 없습니다.');if(['rp_scenes','rp_messages'].includes(h.table_name))return json(await restoreRoleplayHistory(env,me,h,ctx,requestClient(req)));const before=JSON.parse(h.before_json);delete before.revision;return json(await saveRecord(env,me,h.table_name,before,true,ctx,requestClient(req)));}
+  if(path.startsWith('/files/')&&req.method==='GET'){const key=decodeURIComponent(path.slice(7));await authorizeRoleplayFile(env,me,key);return await serveFile(env,key);}
   if(path==='/upload'&&req.method==='POST'){
    const declared=Number(req.headers.get('Content-Length'));if(declared>10485760)fail('이미지는 10MB 이하여야 합니다.');const mime=req.headers.get('Content-Type');if(!['image/webp','image/gif'].includes(mime))fail('WebP 또는 GIF 이미지를 업로드하세요.');const bytes=await req.arrayBuffer();validateImage(bytes,mime);const ext={'image/jpeg':'jpg','image/png':'png','image/gif':'gif','image/webp':'webp'}[mime],key=me.id+'/'+id()+'.'+ext;await env.MEDIA.put(key,bytes,{httpMetadata:{contentType:mime}});await env.DB.prepare('INSERT INTO uploads(path,owner_id,bytes,mime,sha256,created_at) VALUES(?,?,?,?,?,?)').bind(key,me.id,bytes.byteLength,mime,await hash(bytes),now()).run();return json({path:key});
   }
   const parts=path.split('/').filter(Boolean),table=parts[0];if(!tables.includes(table))fail('페이지를 찾을 수 없습니다.',404);
   if(parts.length===1&&req.method==='POST'){if(Number(req.headers.get('Content-Length'))>1000000)fail('입력 크기를 초과했습니다.');return json(await saveRecord(env,me,table,await req.json(),false,ctx,requestClient(req)));}
   if(parts.length===2&&req.method==='DELETE'){
+   if(table==='characters')requireAdmin(me);
    if(table==='members'||table==='affection')fail('이 기록은 삭제할 수 없습니다.');const old=await get(env,table,parts[1]);if(!old||old.deleted_at)fail('기록을 찾을 수 없습니다.',404);
    if(table==='questions'){const target=await live(env,old.character_id);if(!isAdmin(me)&&![old.owner_id,target.owner_id].includes(me.id))fail('질문자 또는 캐릭터 오너만 삭제할 수 있습니다.',403);}
    else if(table==='relationships'){const a=await live(env,old.source_id),b=await live(env,old.target_id);if(!isAdmin(me)&&![a.owner_id,b.owner_id].includes(me.id))fail('관계 당사자만 삭제할 수 있습니다.',403);}else if(!canEdit(me,old))fail('본인 콘텐츠만 삭제할 수 있습니다.',403);

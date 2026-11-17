@@ -5,6 +5,8 @@ import {readFile} from 'node:fs/promises';
 import {notificationPath} from '../src/notificationRoutes.mjs';
 
 test('notification login destinations are restricted to character and board pages',()=>{
+ assert.equal(notificationPath('#/roleplay/scene/abc-123'),'/roleplay/scene/abc-123');
+ assert.equal(notificationPath('#/roleplay/thread/abc-123'),'/roleplay/thread/abc-123');
  assert.equal(notificationPath('#/board/art/abc-123'),'/board/art/abc-123');
  assert.equal(notificationPath('/characters/abc-123'),'/characters/abc-123');
  for(const url of ['https://evil.test','//evil.test','/admin','/api/export','/board/art/../../admin'])assert.equal(notificationPath(url),'');

@@ -27,6 +27,15 @@ test('live connection is idle without timers or reads and updates only on server
  b.sockets[1].end(1008);assert.equal(unauthorized,1);assert.equal(b.timers.size,0);
  live.stop();assert.equal(b.timers.size,0);
 });
+test('roleplay events refresh only the roleplay feed, coalesce while hidden and stay idle without writes',()=>{
+ const b=browser();let data=0,roleplay=0;
+ const live=createLiveUpdates({window:b.win,document:b.doc,Socket:b.Socket,setTimer:b.setTimer,clearTimer:b.clearTimer,onData:()=>data++,onRoleplay:()=>roleplay++});
+ const socket=b.sockets[0];socket.open();socket.message({type:'ready'});assert.equal(roleplay,1);assert.equal(data,1);
+ socket.message({type:'changed',roleplay:true,data:false});assert.equal(roleplay,2);assert.equal(data,1);
+ b.doc.visibilityState='hidden';socket.message({type:'changed',roleplay:true});socket.message({type:'changed',roleplay:true});assert.equal(roleplay,2);
+ b.doc.visibilityState='visible';b.doc.dispatchEvent(new Event('visibilitychange'));assert.equal(roleplay,3);assert.equal(b.timers.size,0);live.stop();
+});
+
 test('image URLs are reused, removed URLs revoked, and late loads after logout discarded',async()=>{
  const loaded=[],revoked=[];const cache=createImageCache(async path=>{loaded.push(path);return 'blob:'+path;},url=>revoked.push(url));
  assert.deepEqual(await cache.resolve(['a','b']),{a:'blob:a',b:'blob:b'});

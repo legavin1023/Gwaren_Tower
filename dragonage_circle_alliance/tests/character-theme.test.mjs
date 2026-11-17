@@ -25,7 +25,7 @@ test('color picker edits, previews and resets color, while mentions resolve the 
  try{
   for(const source of ['CharacterThemePicker','MentionText','Portrait']){
    const {descriptor}=parse(await readFile(new URL('../src/'+source+'.vue',import.meta.url),'utf8'));
-   const code=compileScript(descriptor,{id:source,inlineTemplate:true}).content.replaceAll("'./character-theme.mjs'","'../../src/character-theme.mjs'").replaceAll("'./domain.mjs'","'../../src/domain.mjs'");
+   const code=compileScript(descriptor,{id:source,inlineTemplate:true}).content.replaceAll('"./character-theme.mjs"', '"../../src/character-theme.mjs"').replaceAll("'./character-theme.mjs'","'../../src/character-theme.mjs'").replaceAll("'./domain.mjs'","'../../src/domain.mjs'");
    const file=new URL('theme-'+source+'-'+process.pid+'.mjs',folder);await writeFile(file,code);files.push(file);
   }
   const [Picker,Mention,Portrait]=await Promise.all(files.map(async file=>(await import(file.href)).default));
@@ -36,8 +36,9 @@ test('color picker edits, previews and resets color, while mentions resolve the 
   assert.match(host.querySelector('.character-mention').textContent,/@에이라/);assert.equal(host.querySelector('.character-mention').style.getPropertyValue('--character-color'),'#aa6384');
   const input=host.querySelector('input[type=color]');input.value='#397e81';input.dispatchEvent(new window.Event('input',{bubbles:true}));await nextTick();
   assert.equal(color.value,'#397e81');assert.equal(host.querySelector('.portrait').style.getPropertyValue('--character-color'),'#397e81');assert.equal(host.querySelector('.character-theme-preview').style.getPropertyValue('--character-color'),'#397e81');
-  host.querySelector('[aria-label="숲 테마색"]').click();await nextTick();assert.equal(color.value,'#54785b');assert.equal(host.querySelector('[aria-label="숲 테마색"]').getAttribute('aria-pressed'),'true');
+  assert.equal(host.querySelector('[aria-label="추천 테마색"]'),null);
   const text=host.querySelector('input[type=text]');text.value='#123456';text.dispatchEvent(new window.Event('input',{bubbles:true}));await nextTick();assert.equal(color.value,'#123456');
-  host.querySelector('.secondary-button').click();await nextTick();assert.equal(color.value,'');assert.equal(host.querySelector('.character-mention').style.getPropertyValue('--character-color'),'');assert.equal(host.querySelector('.portrait').classList.contains('character-themed'),false);
+  assert.equal(host.querySelector('.secondary-button'),null);
+  text.value='';text.dispatchEvent(new window.Event('input',{bubbles:true}));await nextTick();assert.equal(color.value,'');assert.equal(host.querySelector('.character-mention').style.getPropertyValue('--character-color'),'');assert.equal(host.querySelector('.portrait').classList.contains('character-themed'),false);
  }finally{app?.unmount();for(const file of files)await unlink(file);await window.happyDOM.abort();window.close();for(const[name,value]of previous)if(value===undefined)delete globalThis[name];else globalThis[name]=value;}
 });

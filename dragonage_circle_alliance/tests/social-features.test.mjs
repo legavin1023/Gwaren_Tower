@@ -17,7 +17,7 @@ test('recruitment editor preserves settings and question form supports asking, o
  try{
   for(const source of ['RecruitmentEditor','RecruitmentStatus','CharacterQuestions']){
    const {descriptor}=parse(await readFile(new URL('../src/'+source+'.vue',import.meta.url),'utf8'));
-   const code=compileScript(descriptor,{id:source,inlineTemplate:true}).content.replaceAll("'./character-theme.mjs'","'../../src/character-theme.mjs'").replaceAll("'./recruitment.mjs'","'../../src/recruitment.mjs'");const file=new URL('social-'+source+'-'+process.pid+'.mjs',folder);await writeFile(file,code);files.push(file);
+   const code=compileScript(descriptor,{id:source,inlineTemplate:true}).content.replace(/['"]\.\/(character-theme|recruitment)\.mjs['"]/g,"'../../src/$1.mjs'");const file=new URL('social-'+source+'-'+process.pid+'.mjs',folder);await writeFile(file,code);files.push(file);
   }
   const [Editor,Status,Questions]=await Promise.all(files.map(async file=>(await import(file.href)).default));
   const extra=ref({theme_color:'#397e81',other:'Keep'}),me=ref({id:'asker',role:'member'}),questions=ref([]),requests=[];

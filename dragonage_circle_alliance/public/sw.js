@@ -10,7 +10,7 @@ self.addEventListener('notificationclick',event=>{
  event.waitUntil((async()=>{
   const base=new URL(self.registration.scope);let url;
   try{url=new URL(event.notification.data?.url||'#/home',base);}catch{url=new URL('#/home',base);}
-  if(url.origin!==base.origin||url.pathname!==base.pathname||!/^#\/(board\/(story|art|notice)\/[^/]+|characters\/[^/]+|home)$/.test(url.hash))url=new URL('#/home',base);
+  if(url.origin!==base.origin||url.pathname!==base.pathname||!/^#\/(board\/(story|art|notice)\/[^/]+|characters\/[^/]+|roleplay\/(scene|thread)\/[-\w]+|home)$/.test(url.hash))url=new URL('#/home',base);
   for(const client of await self.clients.matchAll({type:'window',includeUncontrolled:true})){
    if(new URL(client.url).origin===base.origin){try{const target=await client.navigate(url.href);if(target){await target.focus();return;}}catch{}}
   }

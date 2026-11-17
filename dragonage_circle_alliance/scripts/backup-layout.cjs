@@ -13,6 +13,8 @@ function circleCategoryExports_(snapshot) {
  ['관계·호감도/호감도.json',t.affection],['이미지/이미지정보.json',t.media],
  ['이미지/원본목록.json',t.uploads],['운영 기록/수정·삭제이력.json',t.history],
  ['운영 기록/백업실행기록.json',t.backup_runs || []]
+ ,['역극/장면.json',t.rp_scenes || []],['역극/메시지.json',t.rp_messages || []],['역극/첨부.json',t.rp_assets || []]
+ ,['역극/변경순서.json',t.rp_changes || []],['역극/알림설정.json',t.rp_preferences || []],['역극/읽음상태.json',t.rp_reads || []]
  ];
  return entries.map(function(entry){return {file:entry[0],body:JSON.stringify(entry[1] || [],null,2)};});
 }
