@@ -1,6 +1,6 @@
 <template>
   <div class="notification-center">
-    <button class="secondary-button" :aria-expanded="open" aria-controls="notification-panel" @click="toggle">🔔 알림 <span v-if="unread" class="notification-count">{{ unread > 99 ? '99+' : unread }}</span></button>
+    <button class="secondary-button" :aria-expanded="open" aria-controls="notification-panel" aria-label="알림" title="알림" @click="toggle"><span aria-hidden="true">🔔</span><span class="notification-trigger-label">알림</span> <span v-if="unread" class="notification-count">{{ unread > 99 ? '99+' : unread }}</span></button>
     <section v-if="open" id="notification-panel" class="notification-panel" role="dialog" aria-label="알림 목록">
       <header class="modal-head"><h3>알림</h3><button class="secondary-button" aria-label="알림 닫기" @click="open=false">×</button></header>
       <p v-if="error" class="error" role="alert">{{ error }}</p>

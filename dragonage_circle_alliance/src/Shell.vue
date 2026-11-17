@@ -33,23 +33,11 @@
           >⚙　운영 관리</router-link
         >
       </nav>
-      <div class="sidebar-bottom">
-        <router-link
-          v-if="representative"
-          :to="'/characters/' + representative.id"
-          class="comment-author"
-          :aria-label="representative.name + ' 캐릭터 소개 보기'"
-          ><Portrait :character="representative"
-        /></router-link>
-        <p>{{ me.nickname || me.email }}</p>
-        <button class="outline-button" @click="dark = !dark">
-          {{ dark ? "밝게 보기" : "어둡게 보기" }}</button
-        ><button class="outline-button" @click="act(logout)">로그아웃</button>
-      </div>
+      <AccountControls class="sidebar-bottom account-controls--desktop" :me="me" :representative="representative" :dark="dark" :busy="busy" @toggle-theme="dark = !dark" @logout="act(logout)" />
     </aside>
     <div class="content-shell">
       <header class="topbar">
-        <div>
+        <div class="topbar-heading" :title="pageTitle">
           <span class="breadcrumb">DRAGON AGE / Gwaren Tower</span>
           <h1 class="topbar-title">{{ pageTitle }}</h1>
         </div>
@@ -59,11 +47,14 @@
           ><button
             class="secondary-button"
             :disabled="busy"
+            aria-label="새로고침"
+            title="새로고침"
             @click="act(refresh)"
           >
-            새로고침
+            <svg class="topbar-refresh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg><span class="topbar-refresh-text">새로고침</span>
           </button>
         </div>
+        <AccountControls class="account-controls--mobile" :me="me" :representative="representative" :dark="dark" :busy="busy" compact @toggle-theme="dark = !dark" @logout="act(logout)" />
       </header>
       <main class="main-content">
         <p v-if="error" class="error alert" role="alert">
@@ -1125,6 +1116,7 @@ import {
 import { useRoute, useRouter } from "vue-router";
 import { request, save, remove, upload, imageBlob, exportAll } from "./api";
 import Portrait from "./Portrait.vue";
+import AccountControls from "./AccountControls.vue";
 import ImageSlider from "./ImageSlider.vue";
 import AffectionList from "./AffectionList.vue";
 import NotificationCenter from "./NotificationCenter.vue";
