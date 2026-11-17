@@ -530,3 +530,19 @@ input[type=checkbox],input[type=range] { accent-color: var(--accent); }
  .log-board .art-post-card .image-slider-prev {left:4px;}.log-board .art-post-card .image-slider-next {right:4px;}
 }
 @media(max-width:340px){.log-board .art-post-grid {column-count:1;}}
+
+.recruitment-status {margin:6px 0;}
+.recruitment-badge {display:inline-block;font-size:11px;line-height:1.5;font-weight:600;padding:3px 7px;border:1px solid currentColor;border-radius:2px;}
+.recruitment-open {color:var(--success);}.recruitment-specific {color:var(--accent);}.recruitment-closed {color:var(--muted);}
+.recruitment-note {font-size:13px;color:var(--ink);margin:8px 0;max-width:65ch;}
+.recruitment-filter {display:flex;align-items:center;gap:12px;margin:0 0 14px;font-size:13px;}.recruitment-filter select{width:auto;min-width:160px;}
+.recruitment-editor {border:1px solid var(--line);padding:12px;margin:14px 0;background:var(--field);}.recruitment-editor h4{margin:0;}
+.pair-hero {display:flex;justify-content:center;flex-wrap:wrap;gap:24px;margin-top:14px;}
+.pair-character {display:flex;align-items:center;gap:12px;}.pair-character+.pair-character::before{content:'↔';color:var(--muted);margin-inline-end:12px;}
+.pair-setting h4 {font-size:18px;margin:8px 0;}.pair-setting p{margin-block:6px;}
+.character-questions {margin-top:20px;}.character-questions>.section-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+.character-questions .section-heading label {display:flex;align-items:center;gap:10px;font-size:12px;}.character-questions .section-heading select{width:auto;}
+.question-meta {display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;}.question-meta time{font-size:11px;color:var(--muted);}
+.question-record .prose {margin:10px 0;}.question-record .toolbar {margin-bottom:0;}
+.question-answer {border-inline-start:3px solid var(--line);padding:4px 12px;margin:12px 0;background:var(--field);}.question-answer h4{margin:6px 0;}
+@media(max-width:600px){.pair-hero{gap:14px;justify-content:flex-start;}.pair-character .portrait{width:48px;height:48px;}.pair-character{gap:8px;}.pair-character+.pair-character::before{margin-inline-end:4px;}.recruitment-filter{flex-wrap:wrap;gap:6px;}}

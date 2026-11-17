@@ -1,3 +1,4 @@
+import {questionRecord} from './questions.mjs';
 import {openRealtime,publishRealtime,requestClient} from './realtime.mjs';
 export {RealtimeHub} from './realtime.mjs';
 import { prepareNotifications, notificationStatement, sendNotifications, notificationRoute } from './notifications.mjs';
@@ -56,11 +57,15 @@ async function saveRecord(env,me,table,input,restore=false,ctx,clientId=''){
  }else if(['characters','posts','comments','media'].includes(table)){
   row.owner_id=old?.owner_id||me.id;if(old&&!canEdit(me,old))fail('본인의 콘텐츠만 수정할 수 있습니다.',403);
  }
+ if(table==='questions')Object.assign(row,questionRecord(me,old,restore?{...row,answered_by:input.answered_by??null,answered_at:input.answered_at??null}:row,await live(env,row.character_id),restore));
  if(table==='characters'){
   row.alias??='';row.extra??={};row.faction??='mage';for(const f of ['age','gender','race','origin','position','personality','background','goals','secrets'])row[f]??='';
   if(!row.extra||Array.isArray(row.extra)||typeof row.extra!=='object')fail('자유 설정은 객체로 입력하세요.');
   if(row.extra.theme_color!=null&&row.extra.theme_color!==''&&!(typeof row.extra.theme_color==='string'&&/^#[0-9a-f]{6}$/i.test(row.extra.theme_color)))fail('테마색은 #으로 시작하는 6자리 색상 코드로 입력하세요.');
   if(typeof row.extra.theme_color==='string')row.extra.theme_color=row.extra.theme_color.toLowerCase();
+  if(row.extra.recruitment_status!=null&&!['','open','specific','closed'].includes(row.extra.recruitment_status))fail('자관 모집 상태를 확인하세요.');
+  if(row.extra.recruitment_note!=null&&(typeof row.extra.recruitment_note!=='string'||row.extra.recruitment_note.length>500))fail('모집 내용은 500자 이내로 입력하세요.');
+  if(row.extra.recruitment_status==='specific'&&!row.extra.recruitment_note?.trim())fail('모집 중인 특정 관계를 입력하세요.');
   if(row.image_path){const image=await env.DB.prepare('SELECT * FROM uploads WHERE path=?').bind(row.image_path).first();if(!image||image.owner_id!==row.owner_id)fail('본인이 업로드한 프로필 이미지를 선택하세요.',403);}
  }
  if(['affection','relationships'].includes(table)){
@@ -76,7 +81,7 @@ async function saveRecord(env,me,table,input,restore=false,ctx,clientId=''){
   if((row.category==='notice'||old?.category==='notice')&&!isAdmin(me))fail('공지 작성·수정은 운영자 전용입니다.',403);
   row.body??='';row.character_ids??=[];if(!Array.isArray(row.character_ids)||row.character_ids.length>100)fail('캐릭터 태그를 확인하세요.');for(const key of row.character_ids)await live(env,key);
  }
- if(['comments','media'].includes(table)&&row.post_id){const p=await get(env,'posts',row.post_id);if(!p||p.deleted_at)fail('게시글이 존재하지 않습니다.');if(table==='media'&&!canEdit(me,p))fail('본인 글에만 이미지를 첨부할 수 있습니다.',403);if(table==='media'&&p.category==='art'&&(!old||old.post_id!==row.post_id||old.deleted_at)){const count=await env.DB.prepare('SELECT COUNT(*) AS n FROM media WHERE post_id=? AND deleted_at IS NULL').bind(p.id).first();if(count.n>=10)fail('그림·로그 이미지는 최대 10장까지 첨부할 수 있습니다.');}}
+ if(['comments','media'].includes(table)&&row.post_id){const p=await get(env,'posts',row.post_id);if(!p||p.deleted_at)fail('게시글이 존재하지 않습니다.');if(table==='media'&&!canEdit(me,p))fail('본인 글에만 이미지를 첨부할 수 있습니다.',403);if(table==='media'&&p.category==='art'&&(!old||old.post_id!==row.post_id||old.deleted_at)){const count=await env.DB.prepare('SELECT COUNT(*) AS n FROM media WHERE post_id=? AND deleted_at IS NULL').bind(p.id).first();if(count.n>=10)fail('로그 이미지는 최대 10장까지 첨부할 수 있습니다.');}}
  if(table==='comments'){
   row.character_id??=null;row.target_id??=null;row.post_id??=null;row.parent_id??=null;
   if(row.target_id)await live(env,row.target_id);
@@ -111,7 +116,7 @@ async function backupRoute(req,env,path,ctx){
  }
  if(path==='/backup/restore'&&req.method==='POST'){
   await backupAuthorized(req,env,true);const b=await req.json();if(b.format!=='circle-cloudflare-v1')fail('잘못된 백업 형식');
-  const names=[...tables,'uploads','history',...(Array.isArray(b.tables?.backup_runs)?['backup_runs']:[]),...(Array.isArray(b.tables?.notifications)?['notifications']:[])];for(const t of names)if(!Array.isArray(b.tables?.[t]))fail('불완전한 백업: '+t);
+  const names=[...tables.filter(t=>t!=='questions'||Array.isArray(b.tables?.questions)),'uploads','history',...(Array.isArray(b.tables?.backup_runs)?['backup_runs']:[]),...(Array.isArray(b.tables?.notifications)?['notifications']:[])];for(const t of names)if(!Array.isArray(b.tables?.[t]))fail('불완전한 백업: '+t);
   for(const u of b.tables.uploads){const obj=await env.MEDIA.head(u.path);if(!obj||obj.size!==u.bytes)fail('이미지 원본을 먼저 복구하세요: '+u.path);}
   const statements=[env.DB.prepare('PRAGMA defer_foreign_keys=ON')];
   for(const t of names){const schema=await env.DB.prepare('PRAGMA table_info('+t+')').all();const allowed=new Set(schema.results.map(c=>c.name));for(const row of b.tables[t]){const keys=Object.keys(row);if(!keys.length||keys.some(k=>!allowed.has(k)))fail('잘못된 백업 필드');statements.push(env.DB.prepare(`INSERT INTO ${t} (${keys.join(',')}) VALUES (${keys.map(()=>'?').join(',')}) ON CONFLICT(${t==='uploads'?'path':'id'}) DO UPDATE SET ${keys.map(k=>`${k}=excluded.${k}`).join(',')}`).bind(...keys.map(k=>row[k])));}}
@@ -158,7 +163,8 @@ export default {async fetch(req,env,ctx){
   if(parts.length===1&&req.method==='POST'){if(Number(req.headers.get('Content-Length'))>1000000)fail('입력 크기를 초과했습니다.');return json(await saveRecord(env,me,table,await req.json(),false,ctx,requestClient(req)));}
   if(parts.length===2&&req.method==='DELETE'){
    if(table==='members'||table==='affection')fail('이 기록은 삭제할 수 없습니다.');const old=await get(env,table,parts[1]);if(!old||old.deleted_at)fail('기록을 찾을 수 없습니다.',404);
-   if(table==='relationships'){const a=await live(env,old.source_id),b=await live(env,old.target_id);if(!isAdmin(me)&&![a.owner_id,b.owner_id].includes(me.id))fail('관계 당사자만 삭제할 수 있습니다.',403);}else if(!canEdit(me,old))fail('본인 콘텐츠만 삭제할 수 있습니다.',403);
+   if(table==='questions'){const target=await live(env,old.character_id);if(!isAdmin(me)&&![old.owner_id,target.owner_id].includes(me.id))fail('질문자 또는 캐릭터 오너만 삭제할 수 있습니다.',403);}
+   else if(table==='relationships'){const a=await live(env,old.source_id),b=await live(env,old.target_id);if(!isAdmin(me)&&![a.owner_id,b.owner_id].includes(me.id))fail('관계 당사자만 삭제할 수 있습니다.',403);}else if(!canEdit(me,old))fail('본인 콘텐츠만 삭제할 수 있습니다.',403);
    const stamp=now(),next={...old,deleted_at:stamp};const changed=await env.DB.batch([env.DB.prepare(`UPDATE ${table} SET deleted_at=?,updated_at=?,revision=revision+1 WHERE id=? AND revision=?`).bind(stamp,stamp,old.id,old.revision),env.DB.prepare('INSERT INTO history(id,table_name,record_id,actor_id,action,before_json,after_json,created_at) SELECT ?,?,?,?,?,?,?,? WHERE changes()>0').bind(id(),table,old.id,me.id,'delete',JSON.stringify(old),JSON.stringify(next),stamp)]);if(!changed[0].meta.changes)fail('다른 요청과 충돌했습니다. 새로고침하세요.',409);await publishRealtime(env,{data:true,actorMember:me.id,actorClient:requestClient(req)},ctx);return json({ok:true});
   }
   fail('지원하지 않는 요청입니다.',405);

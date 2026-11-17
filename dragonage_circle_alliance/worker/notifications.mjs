@@ -9,6 +9,15 @@ const preview=text=>String(text||'').replace(/@\[([^\]]+)\]\([0-9a-f-]{36}\)/gi,
 const tags=post=>[...new Set([...(post.character_ids||[]),...mentionedCharacters(post.body)])];
 
 export function notificationEvents({table,row,old,actor,members,characters,post,parent}) {
+ if(table==='questions'){
+  const target=characters.find(character=>character.id===row.character_id&&!character.deleted_at);
+  if(!target)return [];
+  const answering=!!old&&row.answer!==old.answer&&!!row.answer;
+  if(old&&!answering)return [];
+  const recipient=answering?row.owner_id:target.owner_id;
+  if(recipient===actor.id||!members.some(member=>member.id===recipient&&member.active))return [];
+  return [{id:crypto.randomUUID(),member_id:recipient,event_key:'questions:'+row.id+':'+(answering?'answer-'+row.revision:'created'),kind:answering?'answer':'question',reasons:['own_comment'],title:target.name+(answering?'의 질문에 답변이 등록되었습니다':'에게 새 질문이 도착했습니다'),body:preview(answering?row.answer:row.body),url:'#/characters/'+target.id,created_at:row.updated_at}];
+ }
  if(!['posts','comments'].includes(table))return [];
  const creating=!old;
  if(table==='comments'&&!creating)return [];
@@ -33,7 +42,7 @@ export function notificationEvents({table,row,old,actor,members,characters,post,
 }
 
 export async function prepareNotifications(env,actor,table,row,old) {
- if(!['posts','comments'].includes(table))return [];
+ if(!['posts','comments','questions'].includes(table))return [];
  const [members,characters,post,parent]=await Promise.all([
   env.DB.prepare('SELECT id,nickname,active FROM members WHERE active=1').all(),
   env.DB.prepare('SELECT id,owner_id,deleted_at FROM characters').all(),

@@ -1,0 +1,2 @@
+<template><div v-if="state" class="recruitment-status" :class="'recruitment-'+state.value"><span class="recruitment-badge">{{ state.label }}</span><p v-if="details && character.extra?.recruitment_note" class="prose recruitment-note">{{ character.extra.recruitment_note }}</p></div></template>
+<script setup>import {computed} from 'vue';import {recruitment} from './recruitment.mjs';const props=defineProps({character:Object,details:Boolean});const state=computed(()=>recruitment(props.character));</script>

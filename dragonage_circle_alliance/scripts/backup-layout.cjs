@@ -9,7 +9,7 @@ function circleCategoryExports_(snapshot) {
  ['게시판/공지.json',posts.filter(function(p){return p.category==='notice';})],
  ['게시판/썰.json',posts.filter(function(p){return p.category==='story';})],
  ['게시판/그림·로그.json',posts.filter(function(p){return p.category==='art';})],
- ['댓글/댓글.json',t.comments],['관계·호감도/관계.json',t.relationships],
+ ['댓글/댓글.json',t.comments],['캐릭터/질문과 답변.json',t.questions || []],['관계·호감도/관계.json',t.relationships],
  ['관계·호감도/호감도.json',t.affection],['이미지/이미지정보.json',t.media],
  ['이미지/원본목록.json',t.uploads],['운영 기록/수정·삭제이력.json',t.history],
  ['운영 기록/백업실행기록.json',t.backup_runs || []]

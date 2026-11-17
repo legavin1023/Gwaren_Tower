@@ -133,6 +133,7 @@
               <option value="templar">템플러</option>
             </select>
           </div>
+          <label class="recruitment-filter">자관 모집 상태<select v-model="recruitmentFilter" class="form-input" aria-label="자관 모집 필터"><option value="">전체 캐릭터</option><option v-for="option in recruitmentOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
           <div class="characters-grid">
             <router-link
               v-for="c in filteredCharacters"
@@ -145,6 +146,7 @@
                   label(c.faction)
                 }}</span>
                 <h3 class="character-name">{{ c.name }}</h3>
+                <RecruitmentStatus :character="c" />
                 <p class="muted">
                   {{ c.position || c.alias || "마탑의 일원" }}
                 </p>
@@ -170,6 +172,7 @@
                   <small class="muted">{{ character.alias }}</small>
                 </h2>
                 <p>{{ character.position }}</p>
+                <RecruitmentStatus :character="character" details />
                 <small class="muted"
                   >오너 · {{ owner(character.owner_id) }}</small
                 >
@@ -202,7 +205,7 @@
                   </p>
                 </template>
                 <template v-for="(value, key) in character.extra" :key="key">
-                  <template v-if="key !== 'theme_color' && !extraFields.some((f) => f.key === key)"
+                  <template v-if="!['theme_color','recruitment_status','recruitment_note'].includes(key) && !extraFields.some((f) => f.key === key)"
                     ><h4>{{ key }}</h4>
                     <p class="prose">{{ value }}</p></template
                   >
@@ -289,6 +292,7 @@
                   ><b>{{ r.name }}</b
                   ><span class="badge">{{ statusLabel(r.status) }}</span>
                   <p class="prose">{{ r.description }}</p>
+              <router-link v-if="r.status === 'approved'" :to="'/relationships/'+r.id" class="outline-button">두 캐릭터의 관계 페이지 ↗</router-link>
                   <div
                     v-if="r.status === 'pending' && ownsId(r.target_id)"
                     class="toolbar"
@@ -332,6 +336,7 @@
               :to="'/board/' + p.category + '/' + p.id"
               >{{ p.title }}</router-link
             >
+            <CharacterQuestions :character="character" :questions="questions" :members="members" :me="me" :busy="busy" @save="submitQuestion" @remove="id => deleteTarget = {table:'questions',id}" />
             <h3>교류 기록</h3>
             <CommentsPanel
               :comments="comments.filter((c) => c.target_id === character.id)"
@@ -352,6 +357,7 @@
         <template v-else-if="route.path === '/affection'">
           <AffectionList :characters="characters" :affection="affection" :members="members" :me="me" />
         </template>
+        <RelationshipArchive v-else-if="route.path.startsWith('/relationships/')" :relationship-id="route.path.split('/')[2]" :characters="characters" :relationships="relationships" :posts="posts" :media="media" :members="members" @create="createPairPost" />
         <template v-else-if="route.path === '/relationships'"
           ><div class="section-heading">
             <div>
@@ -417,6 +423,7 @@
               }}</router-link>
               <h3>{{ r.name }}</h3>
               <p class="prose">{{ r.description }}</p>
+              <router-link v-if="r.status === 'approved'" :to="'/relationships/'+r.id" class="outline-button">두 캐릭터의 관계 페이지 ↗</router-link>
             </article>
             <p v-if="!filteredRelations.length" class="empty-state">
               표시할 승인된 관계가 없습니다.
@@ -788,6 +795,7 @@
                 @change="file = $event.target.files[0]"
             /></label>
             <CharacterThemePicker v-model="draft.extra.theme_color" :name="draft.name" />
+            <RecruitmentEditor v-model="draft.extra" />
             <label v-for="f in profileFields" :key="f.key"
               >{{ f.label }}
               <select
@@ -1112,6 +1120,11 @@ import { createLiveUpdates } from "./live-updates.mjs";
 import { createImageCache } from "./image-cache.mjs";
 import Portrait from "./Portrait.vue";
 import CharacterThemePicker from "./CharacterThemePicker.vue";
+import RecruitmentStatus from "./RecruitmentStatus.vue";
+import RecruitmentEditor from "./RecruitmentEditor.vue";
+import CharacterQuestions from "./CharacterQuestions.vue";
+import RelationshipArchive from "./RelationshipArchive.vue";
+import {recruitmentOptions} from "./recruitment.mjs";
 import {characterTheme} from "./character-theme.mjs";
 import AccountControls from "./AccountControls.vue";
 import ImageSlider from "./ImageSlider.vue";
@@ -1134,6 +1147,7 @@ const me = ref(null),
   affection = ref([]),
   posts = ref([]),
   comments = ref([]),
+  questions = ref([]),
   media = ref([]),
   history = ref([]);
 const notificationVersion = ref(0), liveStatus = ref("connecting");
@@ -1149,6 +1163,7 @@ const busy = ref(false),
   removedPostImages = ref([]),
   deleteTarget = ref(null),
   search = ref(""),
+  recruitmentFilter = ref(""),
   faction = ref(""),
   kind = ref(""),
   focus = ref(""),
@@ -1253,6 +1268,7 @@ const admin = computed(() => ["admin", "superadmin"].includes(me.value?.role)),
     characters.value.filter(
       (c) =>
         (!faction.value || c.faction === faction.value) &&
+        (!recruitmentFilter.value || c.extra?.recruitment_status === recruitmentFilter.value) &&
         (!search.value ||
           (c.name + " " + c.alias)
             .toLowerCase()
@@ -1399,6 +1415,7 @@ async function refreshOnce() {
   affection.value = data.affection;
   posts.value = data.posts;
   comments.value = data.comments;
+  questions.value = data.questions || [];
 }
 async function logout() {
   await request("/auth/logout", { method: "POST" });
@@ -1407,6 +1424,7 @@ async function logout() {
   characters.value = [];
   posts.value = [];
   comments.value = [];
+  questions.value = [];
   relationships.value = [];
   media.value = [];
 }
@@ -1595,6 +1613,13 @@ watch(
 async function updateStatus(r, status) {
   await save("relationships", { ...r, status });
   await refresh();
+}
+function createPairPost({category:postCategory,character_ids}) {
+  editPost();draft.value.category=postCategory;draft.value.character_ids=[...character_ids];
+}
+async function submitQuestion(value, done) {
+  if(busy.value){done(false,"다른 작업이 끝난 뒤 다시 시도해 주세요.");return;}
+  await act(async () => {try {await save("questions",value);await refresh();done(true);} catch(error){done(false,error.message);throw error;}});
 }
 async function submitComment(data, target, done) {
   await act(async () => {

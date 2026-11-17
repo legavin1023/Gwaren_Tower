@@ -34,7 +34,7 @@ const connectionLabel=computed(()=>({live:'실시간 연결됨',connecting:'연�
 const router=useRouter(),open=ref(false),items=ref([]),unread=ref(0),loading=ref(false),working=ref(false),error=ref(''),message=ref(''),filter=ref('all'),prefs=ref(defaultPreferences()),subscribed=ref(false),subscription=ref(null),config=ref({configured:false,publicKey:''});
 const environment=environmentMessage();
 const permissionDenied=ref('Notification' in window && Notification.permission==='denied');
-const settings=[{key:'new_post',label:'새 글'},{key:'new_comment',label:'새 댓글'},{key:'tag',label:'내 캐릭터가 태그됨'},{key:'own_comment',label:'내 글·캐릭터 소개의 댓글, 내 댓글의 답글'}];
+const settings=[{key:'new_post',label:'새 글'},{key:'new_comment',label:'새 댓글'},{key:'tag',label:'내 캐릭터가 태그됨'},{key:'own_comment',label:'내 글·캐릭터 소개의 댓글, 답글·질문·답변'}];
 const hasSelection=computed(()=>Object.values(prefs.value).some(Boolean));
 const filtered=computed(()=>items.value.filter(item=>filter.value==='all'||item.reasons.some(reason=>['tag','own_comment'].includes(reason))));
 let inflight=null,queued=false,disposed=false;

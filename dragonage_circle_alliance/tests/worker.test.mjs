@@ -10,7 +10,7 @@ class D1 {
  async batch(stmts){this.db.exec('BEGIN');try{const out=stmts.map(s=>s.execute());this.db.exec('COMMIT');return out;}catch(e){this.db.exec('ROLLBACK');throw e;}}
 }
 class R2 {constructor(){this.objects=new Map();}async put(k,b,o){this.objects.set(k,{bytes:new Uint8Array(b),...o});}async get(k){const obj=this.objects.get(k);return obj?{size:obj.bytes.length,body:new Blob([obj.bytes]).stream(),httpMetadata:obj.httpMetadata,arrayBuffer:async()=>obj.bytes.buffer}:null;}async head(k){return this.get(k);}}
-async function fixture(){const env={SITE_ORIGIN:'https://circle.test',BOOTSTRAP_ADMIN_EMAIL:'root@example.test',BACKUP_TOKEN:'backup-test',RESTORE_TOKEN:'restore-test',DB:new D1((await readFile(new URL('../migrations/0001_circle.sql',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../migrations/0002_representative_character.sql',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../migrations/0003_notifications.sql',import.meta.url),'utf8'))),MEDIA:new R2()};for(const [id,role]of [['one','member'],['two','member'],['root','admin']]){await env.DB.prepare('INSERT INTO members(id,email,nickname,role,active,created_at,updated_at) VALUES(?,?,?,?,1,?,?)').bind(id,id+'@example.test',id,role,new Date().toISOString(),new Date().toISOString()).run();await env.DB.prepare('INSERT INTO sessions(token_hash,member_id,expires_at) VALUES(?,?,?)').bind(digest(id),id,Date.now()+86400000).run();}return env;}
+async function fixture(){const env={SITE_ORIGIN:'https://circle.test',BOOTSTRAP_ADMIN_EMAIL:'root@example.test',BACKUP_TOKEN:'backup-test',RESTORE_TOKEN:'restore-test',DB:new D1((await readFile(new URL('../migrations/0001_circle.sql',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../migrations/0002_representative_character.sql',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../migrations/0003_notifications.sql',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../migrations/0004_character_questions.sql',import.meta.url),'utf8'))),MEDIA:new R2()};for(const [id,role]of [['one','member'],['two','member'],['root','admin']]){await env.DB.prepare('INSERT INTO members(id,email,nickname,role,active,created_at,updated_at) VALUES(?,?,?,?,1,?,?)').bind(id,id+'@example.test',id,role,new Date().toISOString(),new Date().toISOString()).run();await env.DB.prepare('INSERT INTO sessions(token_hash,member_id,expires_at) VALUES(?,?,?)').bind(digest(id),id,Date.now()+86400000).run();}return env;}
 async function call(env,path,user='one',method='GET',body,headers={}){const request=new Request(env.SITE_ORIGIN+'/api'+path,{method,headers:{Origin:env.SITE_ORIGIN,...(user?{Cookie:'circle_session='+user}:{}),'Content-Type':'application/json',...headers},...(body!==undefined?{body:typeof body==='string'||body instanceof Uint8Array?body:JSON.stringify(body)}:{})});const response=await worker.fetch(request,env);let data;if(response.headers.get('Content-Type')?.includes('json'))data=await response.json();return {status:response.status,data,response};}
 test('real SQLite: invite gate, ownership, directional affection, approval, comments, media, soft delete, revision restore',async()=>{
  const env=await fixture();try{
@@ -292,4 +292,39 @@ test('character theme survives save, updates and backup; malformed colors and fo
   const cleared=await call(env,'/characters','one','POST',{...created.data,extra:{...created.data.extra,theme_color:''}});
   assert.equal(cleared.status,200);assert.equal(cleared.data.extra.theme_color,'');assert.equal(cleared.data.extra.other,'Preserve settings');
  }finally{env.DB.db.close();}
+});
+
+test('recruitment status and question lifecycle enforce owner permissions, revisions, notifications and backup',async()=>{
+ const env=await fixture(),fresh=await fixture();try{
+  const target=(await call(env,'/characters','two','POST',{name:'Target',faction:'mage',extra:{recruitment_status:'specific',recruitment_note:'A rival'}})).data;
+  for(const extra of [{recruitment_status:'wrong'},{recruitment_status:'specific'},{recruitment_note:123},{recruitment_note:'x'.repeat(501)}])assert.equal((await call(env,'/characters','two','POST',{...target,extra})).status,400);
+  assert.equal((await call(env,'/data')).data.characters[0].extra.recruitment_status,'specific');
+  assert.equal((await call(env,'/questions',null,'POST',{character_id:target.id,body:'Question'})).status,401);
+  assert.equal((await call(env,'/questions','two','POST',{character_id:target.id,body:'Own question'})).status,400);
+  assert.equal((await call(env,'/questions','one','POST',{character_id:target.id,body:'Question',answer:'Fake'})).status,403);
+  const question=(await call(env,'/questions','one','POST',{character_id:target.id,body:'What if it rains?',owner_id:'two',answered_by:'root'})).data;
+  assert.equal(question.owner_id,'one');assert.equal(question.answer,'');assert.equal(question.answered_by,null);
+  assert.equal((await call(env,'/notifications','two')).data.items.filter(item=>item.kind==='question').length,1);
+  assert.equal((await call(env,'/questions','root','POST',{id:question.id,answer:'Impersonated answer'})).status,403);
+  assert.equal((await call(env,'/questions','one','POST',{id:question.id,answer:'Impersonated answer'})).status,403);
+  assert.equal((await call(env,'/questions','two','POST',{id:question.id,body:'Changed question',answer:'Answer'})).status,403);
+  const revised=(await call(env,'/questions','one','POST',{id:question.id,revision:question.revision,body:'What if it snows?'})).data;
+  assert.equal((await call(env,'/questions','two','POST',{id:question.id,revision:question.revision,answer:'Stale'})).status,409);
+  const answered=(await call(env,'/questions','two','POST',{id:question.id,revision:revised.revision,answer:'Find shelter.'})).data;
+  assert.equal(answered.answered_by,'two');assert.ok(answered.answered_at);assert.equal(answered.body,'What if it snows?');
+  assert.equal((await call(env,'/questions','one','POST',{id:question.id,body:'Change after answer'})).status,403);
+  assert.equal((await call(env,'/notifications','one')).data.items.filter(item=>item.kind==='answer').length,1);
+  assert.equal((await call(env,'/data')).data.questions[0].answer,'Find shelter.');
+  const backup=(await call(env,'/backup/snapshot',null,'GET',undefined,{Authorization:'Bearer backup-test'})).data;
+  assert.equal(backup.tables.questions[0].answer,'Find shelter.');
+  assert.equal((await call(fresh,'/backup/restore',null,'POST',backup,{Authorization:'Bearer restore-test'})).status,200);
+  assert.equal((await fresh.DB.prepare('SELECT answer FROM questions').first()).answer,'Find shelter.');
+  assert.equal((await call(env,'/questions/'+question.id,'two','DELETE')).status,200);
+  assert.equal((await call(env,'/data')).data.questions.length,0);
+  const history=(await call(env,'/history','root')).data.find(row=>row.record_id===question.id&&row.action==='delete');
+  assert.equal((await call(env,'/history/'+history.id+'/restore','root','POST',{})).status,200);
+  assert.equal((await call(env,'/data')).data.questions[0].answered_by,'two');
+  const legacy=structuredClone(backup);delete legacy.tables.questions;
+  assert.equal((await call(fresh,'/backup/restore',null,'POST',legacy,{Authorization:'Bearer restore-test'})).status,200);
+ }finally{env.DB.db.close();fresh.DB.db.close();}
 });
