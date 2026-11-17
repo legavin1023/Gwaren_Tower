@@ -71,7 +71,7 @@ async function saveRecord(env,me,table,input,restore=false){
   if((row.category==='notice'||old?.category==='notice')&&me.role!=='admin')fail('공지 작성·수정은 운영자 전용입니다.',403);
   row.body??='';row.character_ids??=[];if(!Array.isArray(row.character_ids)||row.character_ids.length>100)fail('캐릭터 태그를 확인하세요.');for(const key of row.character_ids)await live(env,key);
  }
- if(['comments','media'].includes(table)&&row.post_id){const p=await get(env,'posts',row.post_id);if(!p||p.deleted_at)fail('게시글이 존재하지 않습니다.');if(table==='media'&&!canEdit(me,p))fail('본인 글에만 이미지를 첨부할 수 있습니다.',403);}
+ if(['comments','media'].includes(table)&&row.post_id){const p=await get(env,'posts',row.post_id);if(!p||p.deleted_at)fail('게시글이 존재하지 않습니다.');if(table==='media'&&!canEdit(me,p))fail('본인 글에만 이미지를 첨부할 수 있습니다.',403);if(table==='media'&&p.category==='art'&&(!old||old.post_id!==row.post_id||old.deleted_at)){const count=await env.DB.prepare('SELECT COUNT(*) AS n FROM media WHERE post_id=? AND deleted_at IS NULL').bind(p.id).first();if(count.n>=10)fail('그림·로그 이미지는 최대 10장까지 첨부할 수 있습니다.');}}
  if(table==='comments'){
   row.character_id??=null;row.target_id??=null;row.post_id??=null;row.parent_id??=null;
   if(row.target_id)await live(env,row.target_id);
@@ -129,7 +129,7 @@ export default {async fetch(req,env){
   if(/^\/history\/[^/]+\/restore$/.test(path)&&req.method==='POST'){requireAdmin(me);const h=await env.DB.prepare('SELECT * FROM history WHERE id=?').bind(path.split('/')[2]).first();if(!h?.before_json)fail('복구할 이전 기록이 없습니다.');const before=JSON.parse(h.before_json);delete before.revision;return json(await saveRecord(env,me,h.table_name,before,true));}
   if(path.startsWith('/files/')&&req.method==='GET')return await serveFile(env,decodeURIComponent(path.slice(7)));
   if(path==='/upload'&&req.method==='POST'){
-   const declared=Number(req.headers.get('Content-Length'));if(declared>10485760)fail('이미지는 10MB 이하여야 합니다.');const mime=req.headers.get('Content-Type');if(mime!=='image/webp')fail('새 이미지는 WebP로 압축하여 업로드하세요.');const bytes=await req.arrayBuffer();validateImage(bytes,mime);const ext={'image/jpeg':'jpg','image/png':'png','image/gif':'gif','image/webp':'webp'}[mime],key=me.id+'/'+id()+'.'+ext;await env.MEDIA.put(key,bytes,{httpMetadata:{contentType:mime}});await env.DB.prepare('INSERT INTO uploads(path,owner_id,bytes,mime,sha256,created_at) VALUES(?,?,?,?,?,?)').bind(key,me.id,bytes.byteLength,mime,await hash(bytes),now()).run();return json({path:key});
+   const declared=Number(req.headers.get('Content-Length'));if(declared>10485760)fail('이미지는 10MB 이하여야 합니다.');const mime=req.headers.get('Content-Type');if(!['image/webp','image/gif'].includes(mime))fail('WebP 또는 GIF 이미지를 업로드하세요.');const bytes=await req.arrayBuffer();validateImage(bytes,mime);const ext={'image/jpeg':'jpg','image/png':'png','image/gif':'gif','image/webp':'webp'}[mime],key=me.id+'/'+id()+'.'+ext;await env.MEDIA.put(key,bytes,{httpMetadata:{contentType:mime}});await env.DB.prepare('INSERT INTO uploads(path,owner_id,bytes,mime,sha256,created_at) VALUES(?,?,?,?,?,?)').bind(key,me.id,bytes.byteLength,mime,await hash(bytes),now()).run();return json({path:key});
   }
   const parts=path.split('/').filter(Boolean),table=parts[0];if(!tables.includes(table))fail('페이지를 찾을 수 없습니다.',404);
   if(parts.length===1&&req.method==='POST'){if(Number(req.headers.get('Content-Length'))>1000000)fail('입력 크기를 초과했습니다.');return json(await saveRecord(env,me,table,await req.json()));}

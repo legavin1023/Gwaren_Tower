@@ -749,7 +749,7 @@
             <textarea v-if="f.long" v-model="draft[f.key]" class="form-textarea" rows="4"></textarea>
             <input v-else v-model="draft[f.key]" class="form-input" />
           </label>
-          <p class="muted">프로필 이미지도 WebP로 압축합니다. GIF는 정지 이미지로 변환됩니다.</p>
+          <p class="muted">프로필 이미지는 WebP로 압축하며, GIF는 원본 애니메이션을 유지합니다.</p>
         </template>
         <template v-if="modal === 'relationship'"
           ><label
@@ -829,8 +829,23 @@
             수정하면 다시 승인을 받습니다.
           </p></template
         >
-        <template v-if="modal === 'post'"
-          ><label
+        <template v-if="modal === 'post'">
+          <section v-if="draft.category === 'art'" class="post-attachments" aria-label="이미지 첨부">
+            <h3>이미지 첨부 <small>{{ postImageCount }} / 10</small></h3>
+            <input id="post-images" type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" :disabled="postImageCount >= 10" @change="selectPostImages" />
+            <div class="post-image-slots">
+              <div v-for="(slot, index) in postImageSlots" :key="index" class="post-image-slot">
+                <template v-if="slot">
+                  <img :src="slot.preview || slot.image" :alt="slot.name || slot.caption || ('첨부 이미지 ' + (index + 1))" />
+                  <span>{{ index + 1 }}</span>
+                  <button type="button" :aria-label="(index + 1) + '번 이미지 제외'" @click="removePostImage(slot)">×</button>
+                </template>
+                <label v-else for="post-images" :aria-label="(index + 1) + '번 이미지 첨부'">＋<small>{{ index + 1 }}</small></label>
+              </div>
+            </div>
+            <p class="muted">최대 10장 · 일반 이미지는 WebP 압축 · GIF는 원본 애니메이션 유지 (10MB 이하)</p>
+          </section>
+          <label
             >제목<input
               v-model="draft.title"
               class="form-input"
@@ -854,12 +869,7 @@
             <div class="character-tags" role="group" aria-label="태그할 캐릭터">
               <label v-for="c in characters" :key="c.id"><input type="checkbox" v-model="draft.character_ids" :value="c.id" /> {{ c.name }} <small>· {{ owner(c.owner_id) }}</small></label>
             </div>
-            <label v-if="draft.category === 'art'">이미지 첨부 (여러 장 가능)
-              <input type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" @change="selectPostImages" />
-            </label>
-            <p v-if="draft.category === 'art'" class="muted">이미지는 WebP로 압축하여 저장합니다. GIF는 첫 프레임의 정지 이미지로 변환됩니다.</p>
-            <ul v-if="postFiles.length"><li v-for="(attachment, index) in postFiles" :key="index">{{ attachment.name }} <button type="button" :disabled="busy" @click="postFiles.splice(index, 1)">첨부 제외</button></li></ul
-          ></template
+</template
         >
         <template v-if="modal === 'media'"
           ><label
@@ -928,6 +938,7 @@ import {
 import { useRoute, useRouter } from "vue-router";
 import { request, save, remove, upload, imageBlob, exportAll } from "./api";
 import Portrait from "./Portrait.vue";
+import { validateAttachments } from "./image.mjs";
 import MentionText from "./MentionText.vue";
 const RelationshipGraph = defineAsyncComponent(() =>
   import("./RelationshipGraph.vue"),
@@ -953,6 +964,7 @@ const busy = ref(false),
   draft = ref({}),
   file = ref(null),
   postFiles = ref([]),
+  removedPostImages = ref([]),
   deleteTarget = ref(null),
   search = ref(""),
   faction = ref(""),
@@ -1194,7 +1206,8 @@ function editPost(p) {
         character_ids: [],
       };
   file.value = null;
-  postFiles.value = [];
+  clearPostPreviews();
+  removedPostImages.value = [];
   modal.value = "post";
   error.value = "";
 }
@@ -1208,10 +1221,29 @@ function openMedia(characterId = "", postId = "") {
   modal.value = "media";
   error.value = "";
 }
-function selectPostImages(event) {
-  postFiles.value.push(...Array.from(event.target.files || []).map(file => ({ file, name: file.name })));
-  event.target.value = "";
+const existingPostImages = computed(() => media.value.filter(m => m.post_id === draft.value.id && !removedPostImages.value.includes(m.id)));
+const postImageCount = computed(() => existingPostImages.value.length + postFiles.value.length);
+const postImageSlots = computed(() => Array.from({length: 10}, (_, index) => [...existingPostImages.value, ...postFiles.value][index] || null));
+function clearPostPreviews() {
+  postFiles.value.forEach(item => URL.revokeObjectURL(item.preview));
+  postFiles.value = [];
 }
+function removePostImage(slot) {
+  if (slot.file) {
+    const index = postFiles.value.indexOf(slot);
+    if (index >= 0) { URL.revokeObjectURL(slot.preview); postFiles.value.splice(index, 1); }
+  } else { removedPostImages.value.push(slot.id); }
+}
+function selectPostImages(event) {
+  try {
+    const files = Array.from(event.target.files || []);
+    validateAttachments(files, postImageCount.value);
+    postFiles.value.push(...files.map(file => ({ file, name: file.name, preview: URL.createObjectURL(file) })));
+    error.value = '';
+  } catch (e) { error.value = e.message; }
+  event.target.value = '';
+}
+watch(modal, (value, previous) => { if (previous === 'post' && value !== 'post') clearPostPreviews(); });
 async function submitDraft() {
   let table = {
     character: "characters",
@@ -1230,13 +1262,23 @@ async function submitDraft() {
     value.bytes = file.value.size;
     value.mime = file.value.type;
   }
+  if (table === "posts" && value.category === "art") validateAttachments([], postImageCount.value);
   const saved = await save(table, value);
   if (table === "posts") {
     draft.value = { ...saved, character_ids: [...saved.character_ids] };
+    for (const imageId of [...removedPostImages.value]) {
+      await remove("media", imageId);
+      media.value = media.value.filter(m => m.id !== imageId);
+      removedPostImages.value = removedPostImages.value.filter(id => id !== imageId);
+    }
     while (postFiles.value.length) {
       const attachment = postFiles.value[0];
       attachment.path ||= await upload(attachment.file);
-      await save("media", { post_id: saved.id, path: attachment.path, caption: attachment.name });
+      const attached = await save("media", { post_id: saved.id, path: attachment.path, caption: attachment.name });
+      const preview = await imageBlob(attached.path).catch(() => '');
+      if (preview) urls.push(preview);
+      media.value.push({ ...attached, image: preview });
+      URL.revokeObjectURL(attachment.preview);
       postFiles.value.shift();
     }
   }
@@ -1367,6 +1409,7 @@ onMounted(async () => {
 });
 onBeforeUnmount(() => {
   clearInterval(timer);
+  clearPostPreviews();
   clearUrls();
 });
 </script>

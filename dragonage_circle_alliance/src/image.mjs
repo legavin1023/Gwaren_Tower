@@ -1,7 +1,11 @@
-// Every new upload is decoded and re-encoded as WebP before leaving the browser.
+// GIF originals preserve animation; other formats are re-encoded as WebP.
 export async function compressImage(file) {
   if (!file || !['image/jpeg','image/png','image/webp','image/gif'].includes(file.type)) throw new Error('JPG·PNG·WebP·GIF 이미지를 선택하세요.');
   if (file.size > 30 * 1048576) throw new Error('원본 이미지는 30MB 이하여야 합니다.');
+  if (file.type === 'image/gif') {
+    if (file.size > 10485760) throw new Error('GIF 원본은 10MB 이하여야 합니다.');
+    return file;
+  }
   let bitmap;
   try {
     bitmap = await createImageBitmap(file);
@@ -19,5 +23,14 @@ export async function compressImage(file) {
     return blob;
   } finally {
     bitmap?.close();
+  }
+}
+
+export function validateAttachments(files, existingCount = 0) {
+  if (existingCount + files.length > 10) throw new Error('이미지는 기존 첨부를 포함해 최대 10장까지 올릴 수 있습니다.');
+  for (const file of files) {
+    if (!['image/jpeg','image/png','image/webp','image/gif'].includes(file.type)) throw new Error('JPG·PNG·WebP·GIF 이미지를 선택하세요.');
+    const max = file.type === 'image/gif' ? 10 : 30;
+    if (file.size > max * 1048576) throw new Error(`${file.name || '이미지'}: 원본은 ${max}MB 이하여야 합니다.`);
   }
 }

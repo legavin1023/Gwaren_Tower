@@ -59,3 +59,26 @@ test('snapshot + R2 restore roundtrip, read-only backup key and rollback on inva
  const broken=structuredClone(backup);broken.tables.characters[0].name='변경되면 안 됨';broken.tables.media[0].owner_id='missing';assert.equal((await call(fresh,'/backup/restore',null,'POST',broken,{Authorization:'Bearer restore-test'})).status,400);assert.equal((await fresh.DB.prepare('SELECT name FROM characters WHERE id=?').bind(a.id).first()).name,'보존된 캐릭터');
  }finally{env.DB.db.close();fresh.DB.db.close();}
 });
+
+test('art attachments cap at ten, can be replaced, and GIF originals remain intact', async () => {
+  const env = await fixture();
+  try {
+    const post = (await call(env,'/posts','one','POST',{category:'art',title:'이미지 열 장'})).data;
+    const bytes = new TextEncoder().encode('GIF89a original animated bytes');
+    const upload = await call(env,'/upload','one','POST',bytes,{'Content-Type':'image/gif'});
+    assert.equal(upload.status,200); assert.ok(upload.data.path.endsWith('.gif'));
+    const response = (await call(env,'/files/'+encodeURIComponent(upload.data.path),'one')).response;
+    assert.equal(response.headers.get('Content-Type'),'image/gif');
+    assert.deepEqual(new Uint8Array(await response.arrayBuffer()), bytes);
+    let first;
+    for (let i=0; i<10; i++) {
+      const file=(await call(env,'/upload','one','POST',bytes,{'Content-Type':'image/gif'})).data;
+      const attached=await call(env,'/media','one','POST',{post_id:post.id,path:file.path});
+      assert.equal(attached.status,200); first ||= attached.data;
+    }
+    assert.equal((await call(env,'/media','one','POST',{post_id:post.id,path:upload.data.path})).status,400);
+    assert.equal((await call(env,'/media','one','POST',{...first,caption:'기존 이미지 수정'})).status,200);
+    assert.equal((await call(env,'/media/'+first.id,'one','DELETE')).status,200);
+    assert.equal((await call(env,'/media','one','POST',{post_id:post.id,path:upload.data.path})).status,200);
+  } finally { env.DB.db.close(); }
+});
