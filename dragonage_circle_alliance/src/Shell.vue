@@ -219,7 +219,9 @@
                 <template v-for="f in ownerFields" :key="f.key">
                   <h4>{{ f.label }}</h4>
                   <p class="prose">
-                    {{ fieldValue(character, f) || "아직 기록되지 않았습니다." }}
+                    {{
+                      fieldValue(character, f) || "아직 기록되지 않았습니다."
+                    }}
                   </p>
                 </template>
               </section>
@@ -563,23 +565,46 @@
                 ＋ 글 작성
               </button>
             </div>
-            <router-link
-              v-for="p in posts
-                .filter((p) => p.category === category)
-                .slice()
-                .reverse()"
-              :key="p.id"
-              class="card post-row"
-              :to="'/board/' + category + '/' + p.id"
-              ><div>
-                <h3>{{ p.title }}</h3>
-                <span class="muted"
-                  >{{ name(p.character_id) || owner(p.owner_id) }} ·
-                  {{ date(p.created_at) }}</span
+            <div :class="{ 'art-post-grid': category === 'art' }">
+              <router-link
+                v-for="p in posts
+                  .filter((p) => p.category === category)
+                  .slice()
+                  .reverse()"
+                :key="p.id"
+                class="card post-row"
+                :class="{ 'art-post-card': category === 'art' }"
+                :to="'/board/' + category + '/' + p.id"
+              >
+                <div
+                  v-if="category === 'art' && postMedia(p.id).length"
+                  class="art-post-preview"
                 >
-              </div>
-              <span>↗</span></router-link
-            >
+                  <img
+                    v-if="postMedia(p.id)[0].image"
+                    :src="postMedia(p.id)[0].image"
+                    :alt="postMedia(p.id)[0].caption || p.title"
+                    loading="lazy"
+                  />
+                  <span v-else class="art-preview-unavailable"
+                    >이미지를 불러올 수 없습니다.</span
+                  >
+                  <span class="art-image-count"
+                    >이미지 {{ postMedia(p.id).length }}장</span
+                  >
+                </div>
+                <div class="post-list-summary">
+                  <div>
+                    <h3>{{ p.title }}</h3>
+                    <span class="muted"
+                      >{{ name(p.character_id) || owner(p.owner_id) }} ·
+                      {{ date(p.created_at) }}</span
+                    >
+                  </div>
+                  <span aria-hidden="true">↗</span>
+                </div>
+              </router-link>
+            </div>
             <p
               v-if="!posts.some((p) => p.category === category)"
               class="empty-state"
@@ -593,7 +618,6 @@
         >
         <template v-else-if="route.path === '/gallery'"
           ><div class="section-heading">
-            <h2>그림과 기록</h2>
             <button class="primary-button" @click="openMedia()">
               ＋ 이미지 등록
             </button>
@@ -681,24 +705,58 @@
               <dt><router-link to="/home">⌂ 메인</router-link></dt>
               <dd>최근 공지와 캐릭터·관계·이야기 현황을 확인합니다.</dd>
               <dt><router-link to="/characters">♙ 캐릭터</router-link></dt>
-              <dd>캐릭터를 등록하고 프로필과 설정을 작성합니다. 다른 캐릭터의 소개를 보고 호감도·관계·교류 기록을 남길 수 있습니다.</dd>
+              <dd>
+                캐릭터를 등록하고 프로필과 설정을 작성합니다. 다른 캐릭터의
+                소개를 보고 호감도·관계·교류 기록을 남길 수 있습니다.
+              </dd>
               <dt><router-link to="/relationships">◇ 관계도</router-link></dt>
-              <dd>캐릭터 사이의 관계를 제안하고 수락합니다. 서로 확인한 관계는 관계도와 목록에 표시됩니다.</dd>
+              <dd>
+                캐릭터 사이의 관계를 제안하고 수락합니다. 서로 확인한 관계는
+                관계도와 목록에 표시됩니다.
+              </dd>
               <dt><router-link to="/board/story">▤ 썰 게시판</router-link></dt>
-              <dd>캐릭터의 이야기와 썰을 나눕니다. 여러 캐릭터를 태그하고 댓글로 교류할 수 있습니다.</dd>
+              <dd>
+                캐릭터의 이야기와 썰을 나눕니다. 여러 캐릭터를 태그하고 댓글로
+                교류할 수 있습니다.
+              </dd>
               <dt><router-link to="/board/art">▧ 그림·로그</router-link></dt>
-              <dd>그림과 교류 로그를 올립니다. 글마다 이미지를 최대 10장 첨부할 수 있으며, 일반 이미지는 WebP로 압축하고 GIF는 원본 애니메이션을 유지합니다.</dd>
+              <dd>
+                그림과 교류 로그를 올립니다. 글마다 이미지를 최대 10장 첨부할 수
+                있으며, 일반 이미지는 WebP로 압축하고 GIF는 원본 애니메이션을
+                유지합니다.
+              </dd>
               <dt><router-link to="/gallery">▦ 이미지 보관함</router-link></dt>
-              <dd>사이트에 등록한 이미지를 한곳에서 모아 봅니다. 연결된 캐릭터나 게시글로 이동할 수 있고, 이미지만 따로 등록할 수도 있습니다.</dd>
+              <dd>
+                사이트에 등록한 이미지를 한곳에서 모아 봅니다. 연결된 캐릭터나
+                게시글로 이동할 수 있고, 이미지만 따로 등록할 수도 있습니다.
+              </dd>
               <dt><router-link to="/board/notice">▣ 공지</router-link></dt>
-              <dd>사이트 이용과 운영에 관한 공지를 확인합니다. 관리자가 작성합니다.</dd>
+              <dd>
+                사이트 이용과 운영에 관한 공지를 확인합니다. 관리자가
+                작성합니다.
+              </dd>
               <dt><router-link to="/profile">○ 내 프로필</router-link></dt>
-              <dd>오너 닉네임과 대표 캐릭터를 설정합니다. 오너 이름으로 쓴 댓글에는 대표 캐릭터 프사가 표시되며, 프사를 누르면 캐릭터 소개로 이동합니다.</dd>
+              <dd>
+                오너 닉네임과 대표 캐릭터를 설정합니다. 오너 이름으로 쓴
+                댓글에는 대표 캐릭터 프사가 표시되며, 프사를 누르면 캐릭터
+                소개로 이동합니다.
+              </dd>
               <dt>🔔 상단 알림</dt>
-              <dd>새 글·댓글, 내 캐릭터 태그와 내 글의 반응을 확인합니다. 알림창에서 브라우저 알림을 허용하고 이 기기에서 받을 알림 종류를 선택할 수 있습니다.</dd>
+              <dd>
+                새 글·댓글, 내 캐릭터 태그와 내 글의 반응을 확인합니다.
+                알림창에서 브라우저 알림을 허용하고 이 기기에서 받을 알림 종류를
+                선택할 수 있습니다.
+              </dd>
               <template v-if="admin">
                 <dt><router-link to="/admin">⚙ 운영 관리</router-link></dt>
-                <dd>회원을 초대하고 일반 회원의 접근을 관리합니다.<template v-if="superAdmin"> 최고 관리자는 관리자 지정·해제와 DB 내보내기·변경 기록 조회·복구도 할 수 있습니다.</template></dd>
+                <dd>
+                  회원을 초대하고 일반 회원의 접근을 관리합니다.<template
+                    v-if="superAdmin"
+                  >
+                    최고 관리자는 관리자 지정·해제와 DB 내보내기·변경 기록
+                    조회·복구도 할 수 있습니다.</template
+                  >
+                </dd>
               </template>
             </dl>
           </section></template
@@ -747,7 +805,22 @@
               >
                 {{ member.active ? "접근 차단" : "차단 해제" }}
               </button>
-              <button v-if="superAdmin && member.id !== me.id && member.role !== 'superadmin'" class="outline-button" :disabled="busy" @click="act(() => changeMemberRole(member))">{{ member.role === 'admin' ? '일반 회원으로 변경' : '관리자로 지정' }}</button>
+              <button
+                v-if="
+                  superAdmin &&
+                  member.id !== me.id &&
+                  member.role !== 'superadmin'
+                "
+                class="outline-button"
+                :disabled="busy"
+                @click="act(() => changeMemberRole(member))"
+              >
+                {{
+                  member.role === "admin"
+                    ? "일반 회원으로 변경"
+                    : "관리자로 지정"
+                }}
+              </button>
             </article>
           </section>
           <section v-if="superAdmin" class="card">
@@ -883,11 +956,17 @@
               >{{ f.label }}
               <textarea
                 v-if="f.long"
-                :value="fieldValue(draft, f)" @input="setField(f, $event.target.value)"
+                :value="fieldValue(draft, f)"
+                @input="setField(f, $event.target.value)"
                 class="form-textarea"
                 rows="4"
               ></textarea>
-              <input v-else :value="fieldValue(draft, f)" @input="setField(f, $event.target.value)" class="form-input" />
+              <input
+                v-else
+                :value="fieldValue(draft, f)"
+                @input="setField(f, $event.target.value)"
+                class="form-input"
+              />
             </label>
           </template>
           <template v-if="modal === 'relationship'"
@@ -1105,21 +1184,30 @@
     >
       <div class="modal-head">
         <h3>이 기록을 삭제할까요?</h3>
-        <button class="secondary-button" :disabled="busy" @click="deleteTarget = null" aria-label="삭제 확인 닫기">×</button>
-      </div>
-      <div class="modal-body">
-      <p>목록에서 숨겨지며, 최고 관리자가 변경 기록에서 복구할 수 있습니다.</p>
-      <div class="toolbar">
         <button
-          class="primary-button"
+          class="secondary-button"
           :disabled="busy"
-          @click="act(deleteRecord)"
+          @click="deleteTarget = null"
+          aria-label="삭제 확인 닫기"
         >
-          삭제</button
-        ><button class="secondary-button" @click="deleteTarget = null">
-          취소
+          ×
         </button>
       </div>
+      <div class="modal-body">
+        <p>
+          목록에서 숨겨지며, 최고 관리자가 변경 기록에서 복구할 수 있습니다.
+        </p>
+        <div class="toolbar">
+          <button
+            class="primary-button"
+            :disabled="busy"
+            @click="act(deleteRecord)"
+          >
+            삭제</button
+          ><button class="secondary-button" @click="deleteTarget = null">
+            취소
+          </button>
+        </div>
       </div>
     </section>
   </div>
@@ -1329,10 +1417,24 @@ function ownsId(id) {
 function label(value) {
   return value === "mage" ? "마법사" : "템플러";
 }
-function roleLabel(role) { return {superadmin:'최고 관리자',admin:'관리자',member:'회원'}[role] || '회원'; }
-function canManageMember(member) { return member.id !== me.value?.id && member.role !== 'superadmin' && (superAdmin.value || member.role === 'member'); }
+function roleLabel(role) {
+  return (
+    { superadmin: "최고 관리자", admin: "관리자", member: "회원" }[role] ||
+    "회원"
+  );
+}
+function canManageMember(member) {
+  return (
+    member.id !== me.value?.id &&
+    member.role !== "superadmin" &&
+    (superAdmin.value || member.role === "member")
+  );
+}
 async function changeMemberRole(member) {
-  await save('members', { ...member, role: member.role === 'admin' ? 'member' : 'admin' });
+  await save("members", {
+    ...member,
+    role: member.role === "admin" ? "member" : "admin",
+  });
   await refresh();
 }
 function statusLabel(s) {
@@ -1341,12 +1443,15 @@ function statusLabel(s) {
 function date(s) {
   return new Date(s).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
 }
-function categoryLabel(s) {
-  return (
-    { story: "썰 게시판", art: "그림·로그 보관함", notice: "공지" }[s] ||
-    "게시판"
-  );
+function postMedia(postId) {
+  return media.value.filter((item) => item.post_id === postId);
 }
+// function categoryLabel(s) {
+//   return (
+//     { story: "썰 게시판", art: "그림·로그 보관함", notice: "공지" }[s] ||
+//     "게시판"
+//   );
+// }
 async function act(fn) {
   if (busy.value) return;
   busy.value = true;
@@ -1660,10 +1765,14 @@ onMounted(async () => {
     representativeId.value = me.value.representative_character_id || null;
     await refresh();
     try {
-      const destination = notificationPath(sessionStorage.getItem('circle-notification-destination'));
-      sessionStorage.removeItem('circle-notification-destination');
+      const destination = notificationPath(
+        sessionStorage.getItem("circle-notification-destination"),
+      );
+      sessionStorage.removeItem("circle-notification-destination");
       if (destination) await router.replace(destination);
-    } catch { /* Session storage can be disabled in private browsing. */ }
+    } catch {
+      /* Session storage can be disabled in private browsing. */
+    }
     timer = setInterval(async () => {
       if (
         document.visibilityState === "visible" &&
@@ -1686,8 +1795,14 @@ onMounted(async () => {
     if (!me.value) {
       try {
         const destination = notificationPath(route.path);
-        if (destination) sessionStorage.setItem('circle-notification-destination', destination);
-      } catch { /* Keep the login screen usable if storage is disabled. */ }
+        if (destination)
+          sessionStorage.setItem(
+            "circle-notification-destination",
+            destination,
+          );
+      } catch {
+        /* Keep the login screen usable if storage is disabled. */
+      }
     }
   } finally {
     loading.value = false;
