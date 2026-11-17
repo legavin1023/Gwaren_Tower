@@ -656,47 +656,35 @@
             아직 보관된 이미지가 없습니다.
           </p></template
         >
-        <template v-else-if="route.path === '/profile'"
-          ><section class="card">
-            <h2>내 프로필</h2>
-            <form @submit.prevent="act(saveNickname)">
-              <label
-                >닉네임<input
-                  v-model="nickname"
-                  class="form-input"
-                  required
-                  maxlength="80"
-              /></label>
-              <p class="muted">{{ me.email }}</p>
-              <label
-                >대표 캐릭터
-                <select
-                  v-model="representativeId"
-                  class="form-input"
-                  aria-label="대표 캐릭터"
-                >
-                  <option :value="null">선택하지 않음</option>
-                  <option v-for="c in mine" :key="c.id" :value="c.id">
-                    {{ c.name }}
-                  </option>
-                </select>
-              </label>
-              <router-link
-                v-if="byId(representativeId)"
-                :to="'/characters/' + representativeId"
-                class="comment-author representative-preview"
-                ><Portrait :character="byId(representativeId)" />{{
-                  name(representativeId)
-                }}</router-link
-              >
-              <p class="muted">
-                오너 이름으로 남기는 댓글과 내 프로필에 대표 캐릭터 프사를
-                표시합니다. 프사를 누르면 캐릭터 소개로 이동합니다.
-              </p>
-              <p v-if="!mine.length" class="muted">
-                캐릭터를 등록하면 대표 캐릭터를 선택할 수 있습니다.
-              </p>
-              <button class="primary-button" :disabled="busy">저장</button>
+        <template v-else-if="route.path === '/profile'">
+          <section class="card profile-settings" aria-labelledby="profile-settings-title">
+            <header class="profile-settings-heading">
+              <h2 id="profile-settings-title">내 프로필</h2>
+              <p class="profile-account"><span>로그인 계정</span><span>{{ me.email }}</span></p>
+            </header>
+            <form class="profile-settings-form" @submit.prevent="act(saveNickname)">
+              <div class="profile-settings-fields">
+                <label class="profile-field" for="profile-nickname">
+                  <span>오너 닉네임</span>
+                  <input id="profile-nickname" v-model="nickname" class="form-input" required maxlength="80" autocomplete="nickname" :disabled="busy" />
+                </label>
+                <div class="profile-field">
+                  <label for="profile-representative">대표 캐릭터</label>
+                  <div class="profile-select">
+                    <select id="profile-representative" v-model="representativeId" class="form-input" aria-describedby="profile-representative-help" :disabled="busy">
+                      <option :value="null">선택하지 않음</option>
+                      <option v-for="c in mine" :key="c.id" :value="c.id">{{ c.name }}</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <router-link v-if="byId(representativeId)" :to="'/characters/' + representativeId" class="profile-representative" aria-label="선택한 대표 캐릭터 소개 보기">
+                <Portrait :character="byId(representativeId)" />
+                <span><small>대표 캐릭터 미리보기</small><strong>{{ name(representativeId) }}</strong><small>캐릭터 소개 보기 ↗</small></span>
+              </router-link>
+              <p id="profile-representative-help" class="profile-help">오너 이름으로 남긴 댓글에는 대표 캐릭터 프사가 표시됩니다. 프사를 누르면 캐릭터 소개로 이동합니다.</p>
+              <p v-if="!mine.length" class="profile-help">캐릭터를 등록하면 대표 캐릭터를 선택할 수 있습니다.</p>
+              <div class="profile-settings-actions"><button class="primary-button" :disabled="busy">{{ busy ? '저장 중…' : '프로필 저장' }}</button></div>
             </form>
           </section>
           <section class="card menu-guide" aria-labelledby="menu-guide-title">
