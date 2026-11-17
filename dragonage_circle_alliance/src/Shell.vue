@@ -478,7 +478,7 @@
         <template v-else-if="route.path.startsWith('/board/')"
           ><template v-if="post"
             ><article class="card">
-              <header v-if="post.category === 'art'" class="art-detail-meta">
+              <header v-if="['art', 'story'].includes(post.category)" class="art-detail-meta">
                 <h2>{{ post.title }}</h2>
                 <span class="art-meta-divider" aria-hidden="true">/</span>
                 <p class="art-detail-byline">{{ owner(post.owner_id) }} · <time :datetime="post.created_at">{{ date(post.created_at) }}</time></p>
@@ -502,7 +502,7 @@
               </p>
               </template>
               <MentionText :text="post.body" :characters="characters" />
-              <p v-if="post.category !== 'art' && post.character_ids.length">
+              <p v-if="!['art', 'story'].includes(post.category) && post.character_ids.length">
                 <router-link
                   v-for="id in post.character_ids"
                   :key="id"
