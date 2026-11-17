@@ -1,0 +1,19 @@
+# Local-only development. Production deploys use wrangler.toml / index.mjs.
+name = "dragonage-circle-local"
+main = "dev.mjs"
+compatibility_date = "2026-11-16"
+
+[vars]
+LOCAL_DEVELOPMENT = "1"
+SITE_ORIGIN = "http://localhost:8090"
+BOOTSTRAP_ADMIN_EMAIL = "developer@circle.local"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "circle-alliance-local"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "../migrations"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "circle-alliance-local"

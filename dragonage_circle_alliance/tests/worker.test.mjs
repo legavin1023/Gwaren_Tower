@@ -1,3 +1,5 @@
+import {seedLocalDemo,demoRows} from '../worker/demo-data.mjs';
+import devWorker from '../worker/dev.mjs';
 import {generateKeyPairSync,randomBytes} from 'node:crypto';
 import {sendNotifications,notificationEvents} from '../worker/notifications.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import {DatabaseSync} from 'node:sqlite';import {readFile} from 'node:fs/promises';import {createHash} from 'node:crypto';import worker from '../worker/index.mjs';
@@ -220,5 +222,45 @@ test('device push uses encrypted payloads, rejects endpoint takeover/SSRF, clean
   await call(env,'/auth/logout','two','POST',{});
   assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM push_subscriptions').first()).n,0);
   sent=[];await sendNotifications(env,[event],async()=>{sent.push('unexpected');return new Response(null,{status:201});});assert.equal(sent.length,0);
+ }finally{env.DB.db.close();}
+});
+
+test('local development login is loopback-only, separate from production, and uses local sessions',async()=>{
+ const env=await fixture();env.LOCAL_DEVELOPMENT='1';
+ try{
+  const login=await devWorker.fetch(new Request('http://127.0.0.1:8787/api/auth/login'),env);
+  assert.equal(login.status,302);assert.equal(login.headers.get('Location'),'http://localhost:8090/#/home');
+  const cookie=login.headers.get('Set-Cookie').split(';')[0];
+  const meResponse=await devWorker.fetch(new Request('http://localhost:8090/api/me',{headers:{Cookie:cookie}}),env);
+  assert.equal(meResponse.status,200);const me=await meResponse.json();assert.equal(me.role,'superadmin');assert.equal(me.email,'developer@circle.local');
+  const data=await devWorker.fetch(new Request('http://localhost:8090/api/data',{headers:{Cookie:cookie}}),env);assert.equal(data.status,200);
+  assert.equal((await devWorker.fetch(new Request('https://circle.test/api/auth/login'),env)).status,403);
+  assert.equal((await devWorker.fetch(new Request('http://localhost:8090/api/auth/login',{headers:{Origin:'https://evil.test'}}),env)).status,403);
+  assert.equal((await devWorker.fetch(new Request('http://localhost:8090/api/auth/login',{headers:{'Sec-Fetch-Site':'cross-site'}}),env)).status,403);
+  assert.equal((await devWorker.fetch(new Request('http://localhost:8090/api/auth/login'),{...env,LOCAL_DEVELOPMENT:undefined})).status,403);
+  assert.equal((await call(env,'/auth/login',null)).status,503);
+  env.PUSH_VAPID_PUBLIC_KEY='should-not-be-used';env.PUSH_VAPID_PRIVATE_KEY='should-not-be-used';
+  const push=await devWorker.fetch(new Request('http://localhost:8090/api/push/config',{headers:{Cookie:cookie}}),env);assert.equal((await push.json()).configured,false);
+ }finally{env.DB.db.close();}
+});
+
+test('local demo covers populated screens, stores real images, and preserves edits on repeated seed',async()=>{
+ const env=await fixture();
+ try{
+  await assert.rejects(seedLocalDemo(env),/outside local development/);
+  env.LOCAL_DEVELOPMENT='1';const result=await seedLocalDemo(env);assert.equal(result.seeded,true);
+  assert.equal(result.characters,6);assert.equal(result.posts,7);assert.equal(result.images,23);
+  const demo=demoRows();
+  assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM media WHERE post_id=?').bind(demo.posts[4].id).first()).n,10);
+  assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM relationships WHERE status=?').bind('pending').first()).n,2);
+  assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM characters WHERE owner_id=?').bind('local-developer').first()).n,3);
+  assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM notifications WHERE member_id=? AND read_at IS NULL').bind('local-developer').first()).n,4);
+  const sessionCount=(await env.DB.prepare('SELECT COUNT(*) AS n FROM sessions').first()).n;
+  await env.DB.prepare('UPDATE characters SET name=? WHERE id=?').bind('이름 편집 유지',demo.characters[0].id).run();
+  assert.equal((await seedLocalDemo(env)).seeded,false);
+  assert.equal((await env.DB.prepare('SELECT name FROM characters WHERE id=?').bind(demo.characters[0].id).first()).name,'이름 편집 유지');
+  assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM sessions').first()).n,sessionCount);
+  for(const upload of (await env.DB.prepare('SELECT * FROM uploads').all()).results){const image=await env.MEDIA.get(upload.path);assert.equal(image.size,upload.bytes);assert.equal(digest(new Uint8Array(await image.arrayBuffer())),upload.sha256);assert.equal(image.httpMetadata.contentType,'image/png');}
+  assert.equal((await env.DB.prepare('PRAGMA foreign_key_check').all()).results.length,0);
  }finally{env.DB.db.close();}
 });

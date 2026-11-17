@@ -6,8 +6,9 @@
       <p>마법사와 템플러, 그 사이의 이야기.</p>
       <p class="muted">서로의 캐릭터와 이야기를 나누는 작은 공간입니다.</p>
       <a href="/api/auth/login" class="primary-button login-link"
-        >Google 계정으로 입장</a
+        >{{ localDevelopment ? "로컬 개발 모드로 입장" : "Google 계정으로 입장" }}</a
       >
+      <p v-if="localDevelopment" class="muted">로컬 DB를 사용하는 개발 화면입니다. Google 로그인 없이 입장할 수 있습니다.</p>
       <p v-if="loading">로그인 확인 중…</p>
       <p v-if="error" role="alert" class="error">{{ error }}</p>
       <p v-if="authError" role="alert" class="error">
@@ -226,7 +227,7 @@
                 </template>
               </section>
               <section class="card">
-                <h3>♥ 호감도</h3>
+                <div class="affection-profile-heading"><h3>♥ 호감도</h3><router-link to="/affection" class="outline-button">전체 목록</router-link></div>
                 <p class="muted">
                   내 캐릭터가 {{ character.name }}에게 느끼는 감정
                 </p>
@@ -324,25 +325,7 @@
                 >
                   ＋ 이미지 추가
                 </button>
-                <div class="media-grid">
-                  <figure
-                    v-for="m in media.filter(
-                      (m) => m.character_id === character.id,
-                    )"
-                    :key="m.id"
-                  >
-                    <a :href="m.image" target="_blank" rel="noopener"
-                      ><img :src="m.image" :alt="m.caption || '캐릭터 이미지'"
-                    /></a>
-                    <figcaption>{{ m.caption }}</figcaption>
-                    <button
-                      v-if="own(m)"
-                      @click="deleteTarget = { table: 'media', id: m.id }"
-                    >
-                      삭제
-                    </button>
-                  </figure>
-                </div>
+                <ImageSlider :items="media.filter(m => m.character_id === character.id)" :label="character.name + ' 이미지'" :can-delete="own" @remove="id => deleteTarget = { table: 'media', id }" />
               </section>
             </div>
             <h3>연결된 이야기와 작품</h3>
@@ -374,6 +357,9 @@
             삭제되었거나 존재하지 않는 캐릭터입니다.
           </p></template
         >
+        <template v-else-if="route.path === '/affection'">
+          <AffectionList :characters="characters" :affection="affection" :members="members" :me="me" />
+        </template>
         <template v-else-if="route.path === '/relationships'"
           ><div class="section-heading">
             <div>
@@ -511,23 +497,7 @@
                   >{{ name(id) }}</router-link
                 >
               </p>
-              <div class="media-grid">
-                <figure
-                  v-for="m in media.filter((m) => m.post_id === post.id)"
-                  :key="m.id"
-                >
-                  <a :href="m.image" target="_blank" rel="noopener"
-                    ><img :src="m.image" :alt="m.caption || post.title"
-                  /></a>
-                  <figcaption>{{ m.caption }}</figcaption>
-                  <button
-                    v-if="own(m)"
-                    @click="deleteTarget = { table: 'media', id: m.id }"
-                  >
-                    삭제
-                  </button>
-                </figure>
-              </div>
+              <ImageSlider :items="postMedia(post.id)" :label="post.title" :can-delete="own" @remove="id => deleteTarget = { table: 'media', id }" />
               <div v-if="own(post)" class="toolbar">
                 <button class="outline-button" @click="editPost(post)">
                   글 수정</button
@@ -555,8 +525,7 @@
                 (id) => (deleteTarget = { table: 'comments', id })
               " /></template
           ><template v-else-if="route.path.split('/').length === 3"
-            ><div class="section-heading">
-              <h2>{{ categoryLabel(category) }}</h2>
+            ><div class="section-heading board-actions">
               <button
                 v-if="category !== 'notice' || admin"
                 class="primary-button"
@@ -566,44 +535,18 @@
               </button>
             </div>
             <div :class="{ 'art-post-grid': category === 'art' }">
-              <router-link
-                v-for="p in posts
-                  .filter((p) => p.category === category)
-                  .slice()
-                  .reverse()"
-                :key="p.id"
-                class="card post-row"
-                :class="{ 'art-post-card': category === 'art' }"
-                :to="'/board/' + category + '/' + p.id"
-              >
-                <div
-                  v-if="category === 'art' && postMedia(p.id).length"
-                  class="art-post-preview"
-                >
-                  <img
-                    v-if="postMedia(p.id)[0].image"
-                    :src="postMedia(p.id)[0].image"
-                    :alt="postMedia(p.id)[0].caption || p.title"
-                    loading="lazy"
-                  />
-                  <span v-else class="art-preview-unavailable"
-                    >이미지를 불러올 수 없습니다.</span
-                  >
-                  <span class="art-image-count"
-                    >이미지 {{ postMedia(p.id).length }}장</span
-                  >
-                </div>
-                <div class="post-list-summary">
-                  <div>
-                    <h3>{{ p.title }}</h3>
-                    <span class="muted"
-                      >{{ name(p.character_id) || owner(p.owner_id) }} ·
-                      {{ date(p.created_at) }}</span
-                    >
-                  </div>
-                  <span aria-hidden="true">↗</span>
-                </div>
-              </router-link>
+              <template v-for="p in posts.filter(p => p.category === category).slice().reverse()" :key="p.id">
+                <article v-if="category === 'art'" class="card post-row art-post-card">
+                  <ImageSlider :items="postMedia(p.id)" :label="p.title" compact :to="'/board/' + category + '/' + p.id" />
+                  <router-link class="post-list-summary" :to="'/board/' + category + '/' + p.id">
+                    <div><h3>{{ p.title }}</h3><span class="muted">{{ name(p.character_id) || owner(p.owner_id) }} · {{ date(p.created_at) }}</span></div>
+                    <span aria-hidden="true">↗</span>
+                  </router-link>
+                </article>
+                <router-link v-else class="card post-row" :to="'/board/' + category + '/' + p.id">
+                  <div class="post-list-summary"><div><h3>{{ p.title }}</h3><span class="muted">{{ name(p.character_id) || owner(p.owner_id) }} · {{ date(p.created_at) }}</span></div><span aria-hidden="true">↗</span></div>
+                </router-link>
+              </template>
             </div>
             <p
               v-if="!posts.some((p) => p.category === category)"
@@ -616,50 +559,9 @@
             삭제되었거나 존재하지 않는 게시글입니다.
           </p></template
         >
-        <template v-else-if="route.path === '/gallery'"
-          ><div class="section-heading">
-            <button class="primary-button" @click="openMedia()">
-              ＋ 이미지 등록
-            </button>
-          </div>
-          <div class="media-grid full">
-            <figure v-for="m in media" :key="m.id" class="card">
-              <a :href="m.image" target="_blank" rel="noopener"
-                ><img :src="m.image" :alt="m.caption || '보관 이미지'"
-              /></a>
-              <figcaption>
-                {{ m.caption }}
-                <router-link
-                  v-if="m.character_id"
-                  :to="'/characters/' + m.character_id"
-                  >{{ name(m.character_id) }}</router-link
-                ><router-link
-                  v-if="m.post_id && posts.find((p) => p.id === m.post_id)"
-                  :to="
-                    '/board/' +
-                    posts.find((p) => p.id === m.post_id).category +
-                    '/' +
-                    m.post_id
-                  "
-                  >연결된 글 ↗</router-link
-                >
-              </figcaption>
-              <button
-                v-if="own(m)"
-                @click="deleteTarget = { table: 'media', id: m.id }"
-              >
-                삭제
-              </button>
-            </figure>
-          </div>
-          <p v-if="!media.length" class="empty-state">
-            아직 보관된 이미지가 없습니다.
-          </p></template
-        >
         <template v-else-if="route.path === '/profile'">
-          <section class="card profile-settings" aria-labelledby="profile-settings-title">
+          <section class="card profile-settings" aria-label="내 프로필 설정">
             <header class="profile-settings-heading">
-              <h2 id="profile-settings-title">내 프로필</h2>
               <p class="profile-account"><span>로그인 계정</span><span>{{ me.email }}</span></p>
             </header>
             <form class="profile-settings-form" @submit.prevent="act(saveNickname)">
@@ -697,6 +599,8 @@
                 캐릭터를 등록하고 프로필과 설정을 작성합니다. 다른 캐릭터의
                 소개를 보고 호감도·관계·교류 기록을 남길 수 있습니다.
               </dd>
+              <dt><router-link to="/affection">♥ 호감도</router-link></dt>
+              <dd>캐릭터 사이의 호감도 점수와 감정 설명을 한곳에서 확인합니다. 내 캐릭터가 보낸·받은 기록, 캐릭터별 필터와 점수순·최근 수정순 정렬을 사용할 수 있습니다.</dd>
               <dt><router-link to="/relationships">◇ 관계도</router-link></dt>
               <dd>
                 캐릭터 사이의 관계를 제안하고 수락합니다. 서로 확인한 관계는
@@ -712,11 +616,6 @@
                 그림과 교류 로그를 올립니다. 글마다 이미지를 최대 10장 첨부할 수
                 있으며, 일반 이미지는 WebP로 압축하고 GIF는 원본 애니메이션을
                 유지합니다.
-              </dd>
-              <dt><router-link to="/gallery">▦ 이미지 보관함</router-link></dt>
-              <dd>
-                사이트에 등록한 이미지를 한곳에서 모아 봅니다. 연결된 캐릭터나
-                게시글로 이동할 수 있고, 이미지만 따로 등록할 수도 있습니다.
               </dd>
               <dt><router-link to="/board/notice">▣ 공지</router-link></dt>
               <dd>
@@ -1212,6 +1111,8 @@ import {
 import { useRoute, useRouter } from "vue-router";
 import { request, save, remove, upload, imageBlob, exportAll } from "./api";
 import Portrait from "./Portrait.vue";
+import ImageSlider from "./ImageSlider.vue";
+import AffectionList from "./AffectionList.vue";
 import NotificationCenter from "./NotificationCenter.vue";
 import { notificationPath } from "./notificationRoutes.mjs";
 import { validateAttachments } from "./image.mjs";
@@ -1256,14 +1157,15 @@ const busy = ref(false),
   inviteName = ref("");
 let urls = [],
   timer;
+const localDevelopment = process.env.NODE_ENV === "development";
 const authError = new URLSearchParams(location.search).get("auth_error");
 const navigation = [
   { path: "/home", icon: "⌂", label: "메인" },
   { path: "/characters", icon: "♙", label: "캐릭터" },
   { path: "/relationships", icon: "◇", label: "관계도" },
+  { path: "/affection", icon: "♥", label: "호감도" },
   { path: "/board/story", icon: "▤", label: "썰 게시판" },
   { path: "/board/art", icon: "▧", label: "그림·로그" },
-  { path: "/gallery", icon: "▦", label: "이미지 보관함" },
   { path: "/board/notice", icon: "▣", label: "공지" },
   { path: "/profile", icon: "○", label: "내 프로필" },
 ];

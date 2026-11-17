@@ -8,11 +8,13 @@
     "test": "node --test tests/*.test.mjs",
     "backup": "node scripts/backup.mjs",
     "restore": "node scripts/restore.mjs",
-    "worker:dev": "wrangler dev --config worker/wrangler.toml",
+    "worker:dev": "wrangler dev --local --config worker/wrangler.dev.toml --persist-to .wrangler/local-development --ip 127.0.0.1 --port 8787",
     "worker:deploy": "wrangler deploy --config worker/wrangler.toml",
     "pages:deploy": "wrangler pages deploy dist --project-name gwaren-tower",
-    "db:local": "wrangler d1 migrations apply circle-alliance --local --config worker/wrangler.toml",
-    "db:remote": "wrangler d1 migrations apply circle-alliance --remote --config worker/wrangler.toml"
+    "db:local": "wrangler d1 migrations apply circle-alliance-local --local --config worker/wrangler.dev.toml --persist-to .wrangler/local-development",
+    "db:remote": "wrangler d1 migrations apply circle-alliance --remote --config worker/wrangler.toml",
+    "dev": "node scripts/dev.mjs",
+    "dev:seed": "node scripts/seed-local.mjs"
   },
   "dependencies": {
     "@block65/webcrypto-web-push": "^2.0.0",
@@ -25,6 +27,7 @@
     "@babel/core": "^7.12.16",
     "@vue/cli-plugin-babel": "~5.0.0",
     "@vue/cli-service": "~5.0.0",
+    "happy-dom": "^21.0.4",
     "wrangler": "^4.0.0"
   }
 }
