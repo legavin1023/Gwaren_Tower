@@ -28,24 +28,25 @@ test('roleplay records join multi-character scenes and shared threads without cr
  assert.ok(inlineRoleplay('<img onerror=alert(1)>')[0].text.includes('<img'));
 });
 
-test('roleplay editor restores actor-specific drafts, previews safe formatting and retries with the same request id',async()=>{
+test('roleplay workspace toggles panels, keeps the composer separate, restores drafts and retries safely',async()=>{
  const window=new Window({url:'http://localhost:8090'}),names=['window','document','Element','HTMLElement','SVGElement','Node','Document','ShadowRoot','localStorage','history','location'];
  const previous=new Map(names.map(name=>[name,globalThis[name]]));for(const name of names)globalThis[name]=name==='window'?window:window[name];
  const folder=new URL('../.wrangler/component-tests/',import.meta.url);await mkdir(folder,{recursive:true});const generated=[];let app;
  const requests=[],revoked=[],revoke=URL.revokeObjectURL;URL.revokeObjectURL=url=>revoked.push(url);
- let failSend=true;
+ let failSend=true,viewResponse=null;
  globalThis.__roleplayTestApi={
-  request:async(path,options)=>{const value=options?.body instanceof Blob?null:JSON.parse(options?.body||'{}');requests.push({path,value});if(path==='/roleplay/messages'&&failSend)throw Error('연결이 끊겼습니다');return {id:'saved'};},
+  request:async(path,options)=>{if(path.startsWith('/roleplay/sync')&&viewResponse)return viewResponse;const value=options?.body instanceof Blob?null:JSON.parse(options?.body||'{}');requests.push({path,value});if(path==='/roleplay/messages'&&failSend)throw Error('연결이 끊겼습니다');return {id:'saved'};},
   imageBlob:async path=>'blob:'+path,
  };
  try{
   const clientSource=(await readFile(new URL('../src/roleplay-client.mjs',import.meta.url),'utf8')).replace(/import \{request, imageBlob\} from ['"]\.\/api['"];?/g,'const {request,imageBlob}=globalThis.__roleplayTestApi;').replace(/from ['"]\.\/image\.mjs['"]/g,"from '../../src/image.mjs'");
   const clientFile=new URL('rp-client-'+process.pid+'.mjs',folder);await writeFile(clientFile,clientSource);generated.push(clientFile);
-  const sources=['Portrait','MentionText','RoleplayText','RoleplayEditor','RoleplayMessage'];
+  const sources=['Portrait','MentionText','RoleplayText','RoleplayEditor','RoleplayMessage','RoleplayView'];
   for(const source of sources){
    const {descriptor}=parse(await readFile(new URL('../src/'+source+'.vue',import.meta.url),'utf8'));
    let code=compileScript(descriptor,{id:source,inlineTemplate:true}).content;
    code=code.replace(/import \{request,imageBlob\} from ['"]\.\/api['"];?/g,'const {request,imageBlob}=globalThis.__roleplayTestApi;');
+   code=code.replace(/import \{request\} from ['"]\.\/api['"];?/g,'const {request}=globalThis.__roleplayTestApi;');
    code=code.replace(/from ['"]\.\/roleplay-client\.mjs['"]/g,"from './rp-client-"+process.pid+".mjs'");
    code=code.replace(/from ['"]\.\/([^'"]+\.mjs)['"]/g,(all,name)=>name.startsWith('rp-client-')?all:"from '../../src/"+name+"'");
    code=code.replace(/from ['"]\.\/([^'"]+)\.vue['"]/g,(_,name)=>"from './rp-"+name+'-'+process.pid+".mjs'");
@@ -86,8 +87,27 @@ test('roleplay editor restores actor-specific drafts, previews safe formatting a
   assert.equal(host.querySelector('.rp-body strong').textContent,'@알리스터');
   assert.equal(host.querySelector('time').textContent,'11.17 10:00');assert.match(host.querySelector('time').title,/2026/);
   host.querySelector('button.rp-reply-reference').click();assert.equal(parents[0].id,'parent');
-  [...host.querySelectorAll('button')].find(button=>button.textContent.startsWith('답글')).click();assert.equal(events[0].id,'reply');
+  [...host.querySelectorAll('button')].find(button=>button.textContent.trim()==='↳ 답글').click();assert.equal(events[0].id,'reply');
   message.value={...message.value,deleted_at:'now'};await nextTick();assert.match(host.textContent,/연결된 답글은 보존/);assert.equal(host.querySelector('.rp-body'),null);
+  app.unmount();app=null;
+  // The conversation scrolls separately from the composer; list and people panels are optional on mobile.
+  const View=(await import(new URL('rp-RoleplayView-'+process.pid+'.mjs',folder).href)).default;
+  const root={id:'root',thread_id:'root',owner_id:'one',character_id:'a',author_name:'에이라',faction:'mage',body:'늦은 밤의 도서관',attachments:[],created_at:'2026-11-17T01:00:00Z',updated_at:'2026-11-17T01:00:00Z',revision:1};
+  viewResponse={cursor:1,scenes:[],messages:[root,{...root,id:'child',character_id:'b',parent_id:'root',body:'답변'}],reads:[],newly_visible:[],has_more:false};
+  await router.push('/roleplay');
+  app=createApp({render:()=>h(View,{me:{id:'one',role:'member',nickname:'오너'},characters,members:[],liveStatus:'live'})});app.use(router);app.mount(host);
+  await new Promise(resolve=>setImmediate(resolve));await nextTick();
+  assert.equal(host.querySelectorAll('.rp-thread-card .rp-message-actions button').length,2); // edit and delete only
+  assert.equal(host.querySelector('.rp-thread-card > a').textContent,'대화 보기 · 답글 1개');
+  await router.push('/roleplay/thread/root');await nextTick();
+  assert.ok(host.querySelector('.rp-page--detail'));assert.equal(host.querySelectorAll('.rp-log .rp-message').length,2);
+  const dock=host.querySelector('.rp-composer-dock');assert.ok(dock);assert.equal(dock.closest('.rp-transcript'),null);assert.equal(dock.querySelector('textarea').getAttribute('rows'),'3');
+  host.querySelector('.rp-mobile-bar button').click();await nextTick();assert.equal(host.querySelector('.rp-mobile-bar button').getAttribute('aria-expanded'),'true');
+  host.querySelector('.rp-list-entry').click();await nextTick();assert.equal(host.querySelector('.rp-mobile-bar button').getAttribute('aria-expanded'),'false');
+  host.querySelector('.rp-people-toggle').click();await nextTick();assert.equal(host.querySelectorAll('.rp-person').length,2);
+  host.querySelector('[aria-label="참여 캐릭터 닫기"]').click();await nextTick();assert.equal(host.querySelector('.rp-people-panel'),null);
+  [...host.querySelectorAll('.rp-log button')].find(button=>button.textContent.trim()==='↳ 답글').click();await nextTick();await nextTick();
+  assert.match(dock.textContent,/에이라에게 답글/);assert.equal(document.activeElement,host.querySelector('.rp-composer-dock textarea'));
   app.unmount();app=null;
   // Privacy changes purge the cached text and images before any subsequent page load.
   let feed,syncCount=0,finishImage;

@@ -1,5 +1,5 @@
 <template>
-  <article :id="'rp-message-'+message.id" class="rp-message" :class="{'rp-ooc':!message.character_id,'rp-deleted':message.deleted_at}">
+  <article :id="'rp-message-'+message.id" class="rp-message" :class="{'rp-ooc':!message.character_id,'rp-deleted':message.deleted_at,'rp-is-reply':!!message.parent_id}">
     <router-link v-if="character" :to="'/characters/'+character.id" class="rp-avatar-link"><Portrait :character="character" /></router-link>
     <Portrait v-else :character="{name:message.author_name,faction:message.faction}" />
     <div class="rp-message-content">
@@ -26,8 +26,7 @@
           <a v-for="path in message.attachments" :key="path" :href="images[path]" target="_blank" rel="noopener"><img v-if="images[path]" :src="images[path]" alt="역극 첨부 이미지" loading="lazy" /></a>
         </div>
         <footer class="rp-message-actions">
-          <button v-if="canReply" class="text-button" @click="$emit('reply',message)">답글 {{ replies || '' }}</button>
-          <small v-else-if="replies">답글 {{ replies }}</small>
+          <button v-if="canReply && !preview" class="text-button" @click="$emit('reply',message)">↳ 답글</button>
           <button v-if="message.owner_id === me.id" class="text-button" @click="$emit('edit',message)">수정</button>
           <button v-if="message.owner_id === me.id || ['admin','superadmin'].includes(me.role)" class="text-button" @click="$emit('remove',message)">삭제</button>
         </footer>
@@ -46,7 +45,6 @@ defineEmits(['reply','edit','remove','parent']);
 const character=computed(()=>props.characters.find(row=>row.id===props.message.character_id));
 const parent=computed(()=>props.messages.find(row=>row.id===props.message.parent_id));
 const parentName=computed(()=>props.characters.find(row=>row.id===parent.value?.character_id)?.name||parent.value?.author_name||'오너');
-const replies=computed(()=>props.messages.filter(row=>row.parent_id===props.message.id&&!row.deleted_at).length);
 function date(value){
  const parts=Object.fromEntries(new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(value)).map(part=>[part.type,part.value]));
  return parts.month+'.'+parts.day+' '+parts.hour+':'+parts.minute;

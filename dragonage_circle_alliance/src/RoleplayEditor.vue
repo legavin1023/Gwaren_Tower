@@ -1,8 +1,8 @@
 <template>
-  <form class="rp-editor" @submit.prevent="submit" @keydown.ctrl.enter.prevent="submit">
+  <form class="rp-editor" :class="{'rp-editor--compact':compact}" @submit.prevent="submit" @keydown.ctrl.enter.prevent="submit">
     <div class="rp-editor-heading">
       <Portrait v-if="selected" :character="selected" />
-      <label>현재 작성자
+      <label><span :class="{'sr-only':compact}">작성 캐릭터</span>
         <select v-model="actor" class="form-input" :disabled="!!editing || busy">
           <option value="">OOC / 오너</option>
           <option v-for="character in actors" :key="character.id" :value="character.id">{{ character.name }} — {{ character.faction === 'mage' ? '마법사' : '템플러' }}</option>
@@ -11,8 +11,9 @@
       <span v-if="!actor" class="badge">OOC · {{ me.nickname }}</span>
     </div>
     <p v-if="reply" class="rp-reply-reference">↳ {{ reply.author_name }}에게 답글 <button type="button" class="text-button" @click="$emit('cancel')">취소</button></p>
-    <label :for="inputId">{{ editing ? '메시지 수정' : '대사와 행동' }}</label>
-    <textarea :id="inputId" v-model="body" class="form-textarea" rows="6" maxlength="20000" :disabled="busy" placeholder="대사와 행동을 자유롭게 적어주세요." />
+    <label :for="inputId" :class="{'sr-only':compact}">{{ editing ? '메시지 수정' : '대사와 행동' }}</label>
+    <textarea :id="inputId" v-model="body" class="form-textarea" :rows="compact ? 3 : 6" maxlength="20000" :disabled="busy" placeholder="대사를 적어주세요. 행동 묘사는 *이렇게* 쓸 수 있어요." />
+    <details class="rp-editor-extras"><summary>이미지 · 멘션 · 미리보기<span v-if="attachments.length"> · 첨부 {{ attachments.length }}</span></summary>
     <select class="form-input rp-mention-select" aria-label="캐릭터 멘션 추가" :disabled="busy" @change="mention">
       <option value="">캐릭터 멘션 추가</option>
       <option v-for="character in characters" :key="character.id" :value="character.id">{{ character.name }}</option>
@@ -27,9 +28,10 @@
       <input type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" :disabled="busy" @change="attach" />
     </label>
     <details class="rp-preview"><summary>작성 미리보기</summary><RoleplayText :text="body" :characters="characters" /></details>
-    <small class="muted">{{ draftStatus }} · Ctrl+Enter로 전송</small>
+    </details>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
     <div class="toolbar">
+      <small class="muted rp-draft-status">{{ draftStatus }}<span class="rp-send-hint"> · Ctrl+Enter</span></small>
       <button class="primary-button" :disabled="busy || (!body.trim() && !attachments.length)">{{ busy ? '저장 중…' : editing ? '수정 저장' : '전송' }}</button>
       <button v-if="editing" type="button" class="secondary-button" :disabled="busy" @click="$emit('cancel')">수정 취소</button>
     </div>
@@ -43,10 +45,11 @@ import {uploadRoleplay} from './roleplay-client.mjs';
 import {roleplayDraftKey} from './roleplay-domain.mjs';
 import Portrait from './Portrait.vue';
 import RoleplayText from './RoleplayText.vue';
-const props=defineProps({me:Object,actors:Array,characters:Array,sceneId:String,reply:Object,editing:Object,context:String,images:Object});
+const props=defineProps({me:Object,actors:Array,characters:Array,sceneId:String,reply:Object,editing:Object,context:String,images:Object,compact:Boolean});
 const emit=defineEmits(['saved','cancel']);
 const actor=ref(props.editing ? props.editing.character_id || '' : props.actors[0]?.id || ''),body=ref(''),attachments=ref([]),previews=ref({}),busy=ref(false),error=ref(''),draftStatus=ref('이 기기에 자동 저장됩니다'),requestId=ref(crypto.randomUUID());
 const inputId='rp-body-'+crypto.randomUUID(),selected=computed(()=>props.characters.find(character=>character.id===actor.value));
+defineExpose({focus:()=>document.getElementById(inputId)?.focus({preventScroll:true})});
 let disposed=false,restoring=false;
 function mention(event) {
  const character=props.characters.find(row=>row.id===event.target.value);
