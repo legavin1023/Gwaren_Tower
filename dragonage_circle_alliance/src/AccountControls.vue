@@ -8,6 +8,13 @@
       <router-link to="/profile" class="account-nickname" :title="me.nickname || me.email">{{ me.nickname || me.email }}</router-link>
     </div>
     <div class="account-buttons">
+      <button v-if="canAdmin" type="button" class="outline-button account-mode" :disabled="busy" :aria-pressed="adminMode" :aria-label="adminMode ? '일반 회원 모드로 전환' : '관리자 모드로 전환'" :title="adminMode ? '현재 관리자 모드 · 일반 회원 모드로 전환' : '현재 일반 회원 모드 · 관리자 모드로 전환'" @click="$emit('change-mode', !adminMode)">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path v-if="adminMode" d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z" />
+          <template v-else><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></template>
+        </svg>
+        <span class="account-mode-label">{{ adminMode ? '관리자 모드' : '일반 회원 모드' }}</span>
+      </button>
       <button type="button" class="outline-button account-theme" :aria-label="dark ? '밝게 보기' : '어둡게 보기'" :title="dark ? '밝게 보기' : '어둡게 보기'" :aria-pressed="dark" @click="$emit('toggle-theme')">
         <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
           <template v-if="dark"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></template>
@@ -24,6 +31,6 @@
 </template>
 <script setup>
 import Portrait from './Portrait.vue';
-defineProps({me:{type:Object,required:true},representative:{type:Object,default:null},dark:Boolean,busy:Boolean,compact:Boolean});
-defineEmits(['toggle-theme','logout']);
+defineProps({me:{type:Object,required:true},representative:{type:Object,default:null},dark:Boolean,busy:Boolean,compact:Boolean,canAdmin:Boolean,adminMode:Boolean});
+defineEmits(['toggle-theme','logout','change-mode']);
 </script>

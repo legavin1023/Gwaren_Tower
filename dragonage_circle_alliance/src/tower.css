@@ -1354,12 +1354,18 @@ input[type="range"] {
 }
 .character-profile-summary {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(52px, .6fr) minmax(0, 2fr) minmax(72px, .8fr);
-  gap: 20px 18px;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 0;
   margin-block: 16px;
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
 }
 .character-profile-summary-field {
+  grid-column: span var(--profile-field-span, 12);
   min-width: 0;
+  padding: 12px 14px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 .profile-columns .character-profile-summary-field h4 {
   margin: 0 0 4px;
@@ -1371,9 +1377,13 @@ input[type="range"] {
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
+.profile-columns .character-profile-faction .prose {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
 .character-profile-summary-field.character-profile-field-wide {
+  grid-column: 1 / -1;
   padding-top: 16px;
-  border-top: 1px solid var(--line);
 }
 .profile-columns .character-profile-summary-field.character-profile-field-wide .prose {
   max-width: 80ch;
@@ -1381,12 +1391,18 @@ input[type="range"] {
 }
 @media (max-width: 600px) {
   .character-profile-summary {
-    grid-template-columns: minmax(0, 1fr) 72px;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .character-profile-summary-field {
+    padding: 10px;
   }
 }
 @media (max-width: 360px) {
   .character-profile-summary {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .character-profile-summary .character-profile-summary-field {
+    grid-column: 1 / -1;
   }
 }
 .profile-hero {
@@ -1500,25 +1516,32 @@ input[type="range"] {
 }
 .character-profile-fields {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(52px, .6fr) minmax(0, 2fr) minmax(72px, .8fr);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 14px 12px;
   margin-block: 14px;
 }
 .editor .character-profile-fields > label {
+  grid-column: span var(--profile-field-span, 12);
   min-width: 0;
   margin: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
 }
+.editor .character-profile-fields > label.character-profile-field-wide,
 .character-profile-field-wide {
   grid-column: 1 / -1;
 }
 @media (max-width: 600px) {
   .character-profile-fields {
-    grid-template-columns: minmax(0, 1fr) 72px;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }
 @media (max-width: 480px) {
   .character-profile-fields {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .editor .character-profile-fields > label {
+    grid-column: 1 / -1;
   }
 }
 .form-textarea {
@@ -1706,6 +1729,30 @@ input[type="range"] {
   height: 16px;
   flex: 0 0 auto;
 }
+.account-buttons .account-mode {
+  flex: 1 0 100%;
+}
+.account-buttons .account-mode[aria-pressed="true"],
+.profile-access-mode .outline-button[aria-pressed="true"] {
+  background: var(--nav-active);
+  border-color: var(--metal);
+  color: var(--nav-text);
+}
+.profile-access-mode {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+.profile-access-mode > span {
+  margin-right: 6px;
+  font-size: 13px;
+}
+.profile-access-mode .outline-button {
+  padding: 7px 10px;
+  font-size: 12px;
+}
 .topbar-refresh-icon {
   display: none;
   width: 16px;
@@ -1806,6 +1853,15 @@ input[type="range"] {
     padding: 0 5px;
     font-size: 11px;
     gap: 0;
+  }
+  .account-controls--compact .account-buttons .account-mode {
+    flex: 0 0 28px;
+    width: 28px;
+    min-width: 28px;
+    padding: 0;
+  }
+  .account-controls--compact .account-mode-label {
+    display: none;
   }
   .account-controls--compact .account-theme {
     width: 32px;
@@ -1991,33 +2047,109 @@ input[type="range"] {
   line-height: 1.5;
 }
 .profile-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12px;
+}
+.profile-hero .portrait {
+  width: 56px;
+  height: 56px;
+  font-size: 24px;
+}
+.profile-hero .profile-portrait-pencil {
+  width: 22px;
+  height: 22px;
+}
+.profile-hero .profile-portrait-pencil svg {
+  width: 12px;
+  height: 12px;
 }
 .profile-hero-info {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.profile-hero-info .toolbar {
-  margin-left: 0;
-  margin-bottom: 0;
-}
-.profile-hero-images {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  align-items: flex-start;
-  gap: 12px;
-  max-width: min(300px, 42vw);
+  align-items: center;
+  flex: 1;
+  gap: 10px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.profile-hero-info .character-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 20px;
+}
+.profile-hero-info .faction-badge {
+  flex-shrink: 0;
+  margin: 0;
+}
+.profile-hero-info p,
+.profile-hero-info small,
+.profile-hero-info .recruitment-status {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 160px;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.profile-hero-info .recruitment-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.profile-hero-info .recruitment-note {
+  white-space: nowrap;
+}
+.profile-delete-button {
+  flex-shrink: 0;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+.profile-hero .character-mini-gallery {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 160px;
+  max-width: 160px;
+}
+.profile-hero .character-mini-gallery-head {
+  flex-shrink: 0;
+  margin: 0;
+}
+.profile-hero .character-mini-gallery-images {
+  flex-wrap: nowrap;
+  overflow: hidden;
+  margin: 0;
+}
+.profile-hero .character-mini-gallery-images li {
+  width: 32px;
+  height: 44px;
+  flex-shrink: 0;
 }
 @media (max-width: 600px) {
   .profile-hero {
-    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
   }
-  .profile-hero-images {
-    max-width: 100%;
-    justify-content: flex-start;
+  .profile-hero .portrait {
+    width: 44px;
+    height: 44px;
+  }
+  .profile-hero-info {
+    gap: 6px;
+    font-size: 11px;
+  }
+  .profile-hero-info .character-name {
+    font-size: 15px;
+  }
+  .profile-hero .character-mini-gallery {
+    flex-basis: 36px;
+    max-width: 36px;
+  }
+  .profile-hero .character-mini-gallery-head {
+    display: none;
   }
 }
 .character-portrait-theme .character-theme-picker {

@@ -11,7 +11,7 @@ export function mentionParts(text,characters) {
  const byId=new Map(characters.map(c=>[c.id,c]));
  return String(text||'').split(/(@\[[^\]]+\]\([0-9a-f-]{36}\))/gi).filter(Boolean).map(part=>{
  const match=part.match(/^@\[([^\]]+)\]\(([0-9a-f-]{36})\)$/i);
- return match && byId.has(match[2]) ? {text:byId.get(match[2]).name,id:match[2]} : {text:part};
+ return match ? (byId.has(match[2]) ? {text:byId.get(match[2]).name,id:match[2]} : {text:'@'+match[1]}) : {text:part};
  });
 }
 

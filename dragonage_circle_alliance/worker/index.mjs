@@ -4,7 +4,7 @@ import {portraitHistory} from './portrait-history.mjs';
 import {openRealtime,publishRealtime,requestClient} from './realtime.mjs';
 export {RealtimeHub} from './realtime.mjs';
 import { prepareNotifications, notificationStatement, sendNotifications, notificationRoute } from './notifications.mjs';
-import {tables,fields,fail,requireAdmin,requireSuperAdmin,isAdmin,memberView,memberChange,canEdit,relationshipStatus,validateImage} from './policy.mjs';
+import {tables,fields,fail,requireAdmin,requireSuperAdmin,isAdmin,memberView,sessionMemberView,memberChange,canEdit,relationshipStatus,validateImage} from './policy.mjs';
 const now=()=>new Date().toISOString(),id=()=>crypto.randomUUID();
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const hash=async value=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',typeof value==='string'?new TextEncoder().encode(value):value))].map(x=>x.toString(16).padStart(2,'0')).join('');
@@ -14,7 +14,7 @@ const decode=(table,row)=>{if(!row)return null;const r={...row};if(table==='char
 const encode=value=>typeof value==='object'&&value!==null?JSON.stringify(value):typeof value==='boolean'?Number(value):value??null;
 const get=async(env,t,key)=>decode(t,await env.DB.prepare(`SELECT * FROM ${t} WHERE id=?`).bind(key).first());
 const live=async(env,key)=>{const c=await get(env,'characters',key);if(!c||c.deleted_at)fail('존재하지 않는 캐릭터입니다.');return c;};
-async function session(req,env){const token=cookie(req,'circle_session');if(!token)fail('로그인이 필요합니다.',401);const row=await env.DB.prepare('SELECT m.* FROM members m JOIN sessions s ON s.member_id=m.id WHERE s.token_hash=? AND s.expires_at>? AND m.active=1').bind(await hash(token),Date.now()).first();if(!row)fail('로그인이 만료되었거나 접근이 차단되었습니다.',401);return memberView(env,decode('members',row));}
+async function session(req,env){const token=cookie(req,'circle_session');if(!token)fail('로그인이 필요합니다.',401);const row=await env.DB.prepare('SELECT m.* FROM members m JOIN sessions s ON s.member_id=m.id WHERE s.token_hash=? AND s.expires_at>? AND m.active=1').bind(await hash(token),Date.now()).first();if(!row)fail('로그인이 만료되었거나 접근이 차단되었습니다.',401);return sessionMemberView(env,decode('members',row),req.headers.get('X-Circle-Mode'));}
 async function auth(req,env,path,ctx){
  if(path==='/auth/login'){
   if(!env.GOOGLE_CLIENT_ID||!env.GOOGLE_CLIENT_SECRET||!env.BOOTSTRAP_ADMIN_EMAIL)fail('운영자가 Google 로그인과 관리자 이메일을 먼저 설정해야 합니다.',503);
@@ -154,7 +154,7 @@ export default {async fetch(req,env,ctx){
    const b=await req.json(),nickname=String(b.nickname||'').trim();if(!nickname||nickname.length>80)fail('닉네임은 1~80자입니다.');
    const representative=b.representative_character_id===undefined?me.representative_character_id:(b.representative_character_id||null);
    if(representative){const character=await live(env,representative);if(character.owner_id!==me.id)fail('본인의 캐릭터만 대표 캐릭터로 선택할 수 있습니다.',403);}
-   await env.DB.prepare('UPDATE members SET nickname=?,representative_character_id=?,updated_at=?,revision=revision+1 WHERE id=?').bind(nickname,representative??null,now(),me.id).run();await publishRealtime(env,{data:true,actorMember:me.id,actorClient:requestClient(req)},ctx);return json(memberView(env,await get(env,'members',me.id)));
+   await env.DB.prepare('UPDATE members SET nickname=?,representative_character_id=?,updated_at=?,revision=revision+1 WHERE id=?').bind(nickname,representative??null,now(),me.id).run();await publishRealtime(env,{data:true,actorMember:me.id,actorClient:requestClient(req)},ctx);return json(sessionMemberView(env,await get(env,'members',me.id),req.headers.get('X-Circle-Mode')));
   }
   if(path==='/history'&&req.method==='GET'){requireSuperAdmin(me);return json(await filterRoleplayHistory(env,me,(await env.DB.prepare('SELECT * FROM history ORDER BY created_at DESC LIMIT 200').all()).results));}
   if(/^\/history\/[^/]+\/restore$/.test(path)&&req.method==='POST'){requireSuperAdmin(me);const h=await env.DB.prepare('SELECT * FROM history WHERE id=?').bind(path.split('/')[2]).first();if(!h?.before_json)fail('복구할 이전 기록이 없습니다.');if(['rp_scenes','rp_messages'].includes(h.table_name))return json(await restoreRoleplayHistory(env,me,h,ctx,requestClient(req)));const before=JSON.parse(h.before_json);delete before.revision;return json(await saveRecord(env,me,h.table_name,before,true,ctx,requestClient(req)));}

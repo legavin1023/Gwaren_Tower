@@ -3,7 +3,17 @@ import assert from 'node:assert/strict';
 import {readFile,writeFile,mkdir,unlink} from 'node:fs/promises';
 import {parse,compileScript} from '@vue/compiler-sfc';
 import {Window} from 'happy-dom';
-import {roleplayDraftKey,inlineRoleplay,roleplayRecords} from '../src/roleplay-domain.mjs';
+import {roleplayDraftKey,inlineRoleplay,roleplayRecords,roleplayPlainText} from '../src/roleplay-domain.mjs';
+
+test('roleplay previews resolve mentions before truncation and never expose stored UUID syntax',()=>{
+ const id='765b4c5a-c03e-4dbf-892b-ccf7015ef879',text='솔라스는 대머리 빡빡이 @['+'알리스터'+']('+id+')';
+ assert.equal(roleplayPlainText(text,[]),'솔라스는 대머리 빡빡이 @알리스터');
+ assert.equal(roleplayPlainText(text,[{id,name:'새 이름'}]),'솔라스는 대머리 빡빡이 @새 이름');
+ assert.equal(roleplayPlainText('**@[알리스터]('+id+')**',[],4),'@알리스…');
+ assert.equal(roleplayPlainText('@\\[알리스터\\]\\('+id+'\\)',[]),'@알리스터');
+ const records=roleplayRecords([],[{id:'root',thread_id:'root',character_id:'a',body:text,updated_at:'2026-11-17',created_at:'2026-11-17'}],['a']);
+ assert.equal(records[0].title,'솔라스는 대머리 빡빡이 @알리스터');
+});
 
 test('roleplay records join multi-character scenes and shared threads without creating relationships; drafts are scoped and text formatting is literal',()=>{
  const scenes=[{id:'group',title:'세 사람',participant_ids:['a','b','c'],status:'active',updated_at:'2026-01-01'},{id:'unrelated',participant_ids:['c'],updated_at:'2026-01-01'}];
@@ -64,10 +74,18 @@ test('roleplay editor restores actor-specific drafts, previews safe formatting a
   assert.equal(requests[0].value.request_id,requests[1].value.request_id);assert.equal(requests[0].value.character_id,'a');assert.equal(requests[0].value.scene_id,null);
   assert.equal(JSON.parse(localStorage.getItem(roleplayDraftKey('one',context,'b'))).body,'B의 글');
   app.unmount();app=null;
-  const message=ref({id:'reply',owner_id:'one',character_id:'b',author_name:'이전 이름',faction:'templar',body:'hello',attachments:[],parent_id:'parent',created_at:'2026-11-17T01:00:00Z',revision:1});
-  const all=[{id:'parent',author_name:'에이라',body:'원글'},message.value,{id:'nested',parent_id:'reply',body:'답글'}],events=[];
-  app=createApp({render:()=>h(Message,{message:message.value,messages:all,characters,me:{id:'one',role:'member'},images:{},canReply:true,onReply:row=>events.push(row)})});app.use(router);app.mount(host);
+  const hiddenId='765b4c5a-c03e-4dbf-892b-ccf7015ef879';
+  const message=ref({id:'reply',owner_id:'one',character_id:'b',author_name:'이전 이름',faction:'templar',body:'hello **@[알리스터]('+hiddenId+')**',attachments:[],parent_id:'parent',created_at:'2026-11-17T01:00:00Z',revision:1});
+  const all=[{id:'parent',author_name:'에이라',body:'원글 @[알리스터]('+hiddenId+')'},message.value,{id:'nested',parent_id:'reply',body:'답글'}],events=[],parents=[];
+  app=createApp({render:()=>h(Message,{message:message.value,messages:all,characters,me:{id:'one',role:'member'},images:{},canReply:true,onReply:row=>events.push(row),onParent:row=>parents.push(row)})});app.use(router);app.mount(host);
   assert.equal(host.querySelector('.rp-avatar-link').getAttribute('href'),'/characters/b');assert.equal(host.querySelector('.character-name').getAttribute('href'),'/characters/b');assert.match(host.textContent,/에이라에게 답글/);
+  assert.equal(host.querySelector('.rp-reply-reference').tagName,'BUTTON');
+  assert.equal(host.querySelector('.rp-reply-reference').hasAttribute('href'),false);
+  assert.match(host.querySelector('.rp-reply-preview').textContent,/@알리스터/);
+  assert.equal(host.textContent.includes(hiddenId),false);assert.equal(host.textContent.includes('@['),false);
+  assert.equal(host.querySelector('.rp-body strong').textContent,'@알리스터');
+  assert.equal(host.querySelector('time').textContent,'11.17 10:00');assert.match(host.querySelector('time').title,/2026/);
+  host.querySelector('button.rp-reply-reference').click();assert.equal(parents[0].id,'parent');
   [...host.querySelectorAll('button')].find(button=>button.textContent.startsWith('답글')).click();assert.equal(events[0].id,'reply');
   message.value={...message.value,deleted_at:'now'};await nextTick();assert.match(host.textContent,/연결된 답글은 보존/);assert.equal(host.querySelector('.rp-body'),null);
   app.unmount();app=null;

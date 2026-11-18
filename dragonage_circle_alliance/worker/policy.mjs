@@ -32,6 +32,10 @@ export function memberView(env, row) {
  const isOwner=!!env.BOOTSTRAP_ADMIN_EMAIL && String(row.email||'').toLowerCase()===env.BOOTSTRAP_ADMIN_EMAIL.toLowerCase();
  return {...row,role:isOwner?'superadmin':row.role};
 }
+export function sessionMemberView(env,row,mode){
+ const member=memberView(env,row);if(!member)return null;
+ return {...member,account_role:member.role,role:mode==='member'&&isAdmin(member)?'member':member.role};
+}
 export function memberChange(env, me, old, row) {
  requireAdmin(me);
  const ownerEmail=env.BOOTSTRAP_ADMIN_EMAIL?.toLowerCase();

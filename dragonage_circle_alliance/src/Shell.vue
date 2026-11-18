@@ -38,7 +38,10 @@
       </nav>
       <AccountControls
         class="sidebar-bottom account-controls--desktop"
-        :me="me"
+        :me="viewMe"
+        :can-admin="canAdmin"
+        :admin-mode="administratorMode"
+        @change-mode="switchAccessMode"
         :representative="representative"
         :dark="dark"
         :busy="busy"
@@ -57,7 +60,7 @@
             :version="notificationVersion"
             :status="liveStatus"
           />
-          <span class="badge">{{ roleLabel(me.role) }}</span
+          <span class="badge">{{ canAdmin ? administratorMode ? roleLabel(viewMe.role) + ' 모드' : '일반 회원 모드' : '회원' }}</span
           >
           <button
             class="secondary-button"
@@ -84,7 +87,10 @@
         </div>
         <AccountControls
           class="account-controls--mobile"
-          :me="me"
+          :me="viewMe"
+          :can-admin="canAdmin"
+          :admin-mode="administratorMode"
+          @change-mode="switchAccessMode"
           :representative="representative"
           :dark="dark"
           :busy="busy"
@@ -93,7 +99,7 @@
           @logout="act(logout)"
         />
       </header>
-      <main class="main-content">
+      <main :key="me.id + ':' + administratorMode" class="main-content">
         <p v-if="error" class="error alert" role="alert">
           {{ error }}
           <button @click="error = ''" aria-label="오류 닫기">×</button>
@@ -218,17 +224,6 @@
               class="card profile-hero character-themed"
               :style="characterTheme(character)"
             >
-              <div class="profile-hero-info">
-                <span class="faction-badge" :class="character.faction">{{ label(character.faction) }}</span>
-                <h2 class="character-name">{{ character.name }}</h2>
-                <p>{{ character.position }}</p>
-                <RecruitmentStatus :character="character" details />
-                <small class="muted">오너 · {{ owner(character.owner_id) }}</small>
-                <div v-if="admin" class="toolbar">
-                  <button class="secondary-button" @click="deleteTarget = { table: 'characters', id: character.id }">삭제</button>
-                </div>
-              </div>
-              <div class="profile-hero-images">
               <button
                 v-if="own(character)"
                 type="button"
@@ -254,11 +249,18 @@
                 </span>
               </button>
               <Portrait v-else :character="character" />
+              <div class="profile-hero-info">
+                <h2 class="character-name" :title="character.name">{{ character.name }}</h2>
+                <span class="faction-badge" :class="character.faction">{{ label(character.faction) }}</span>
+                <p v-if="character.position" :title="character.position">{{ character.position }}</p>
+                <small class="muted" :title="'오너 · '+owner(character.owner_id)">오너 · {{ owner(character.owner_id) }}</small>
+                <RecruitmentStatus :character="character" :title="character.extra?.recruitment_note" details />
+                <button v-if="admin" class="secondary-button profile-delete-button" @click="deleteTarget = { table: 'characters', id: character.id }">삭제</button>
+              </div>
               <CharacterMiniGallery
                 v-if="characterGallery(character.id).length"
                 :items="characterGallery(character.id)"
               />
-              </div>
             </section>
             <div class="profile-columns">
               <section class="card">
@@ -267,11 +269,11 @@
                   <button class="outline-button" :aria-pressed="profileTab === 'roleplay'" @click="profileTab = 'roleplay'">역극 기록</button>
                 </nav>
                 <template v-if="profileTab === 'profile'">
-                <h3>캐릭터 프로필</h3>
                 <div class="character-profile-summary">
                 <div v-for="f in profileFields" :key="f.key"
                   class="character-profile-summary-field"
-                  :class="{ 'character-profile-field-wide': f.long || f.key === 'quote' }"
+                  :style="{ '--profile-field-span': f.span || 12 }"
+                  :class="{ 'character-profile-field-wide': f.long || f.key === 'quote', 'character-profile-faction': f.key === 'circle_faction' }"
                 >
                   <h4>{{ f.label }}</h4>
                   <p class="prose">
@@ -319,7 +321,7 @@
                   :characters="characters"
                   :affection="affection"
                   :members="members"
-                  :me="me"
+                  :me="viewMe"
                   :target-character-id="character.id"
                   compact
                 />
@@ -450,7 +452,7 @@
               :character="character"
               :questions="questions"
               :members="members"
-              :me="me"
+              :me="viewMe"
               :busy="busy"
               @save="submitQuestion"
               @remove="(id) => (deleteTarget = { table: 'questions', id })" />
@@ -460,7 +462,7 @@
               :characters="characters"
               :members="members"
               :mine="mine"
-              :me="me"
+              :me="viewMe"
               @submit="
                 (data, done) =>
                   submitComment(data, { target_id: character.id }, done)
@@ -471,13 +473,13 @@
             삭제되었거나 존재하지 않는 캐릭터입니다.
           </p></template
         >
-        <RoleplayView v-else-if="route.path.startsWith('/roleplay')" :me="me" :characters="characters" :members="members" :version="roleplayVersion" :live-status="liveStatus" />
+        <RoleplayView v-else-if="route.path.startsWith('/roleplay')" :me="viewMe" :characters="characters" :members="members" :version="roleplayVersion" :live-status="liveStatus" />
         <template v-else-if="route.path === '/affection'">
           <AffectionList
             :characters="characters"
             :affection="affection"
             :members="members"
-            :me="me"
+            :me="viewMe"
           />
         </template>
         <RelationshipArchive
@@ -698,7 +700,7 @@
               :characters="characters"
               :members="members"
               :mine="mine"
-              :me="me"
+              :me="viewMe"
               @submit="
                 (data, done) => submitComment(data, { post_id: post.id }, done)
               "
@@ -766,6 +768,11 @@
                 <span>로그인 계정</span><span>{{ me.email }}</span>
               </p>
             </header>
+            <div v-if="canAdmin" class="profile-access-mode" role="group" aria-label="이용 모드 선택">
+              <span>이용 모드</span>
+              <button type="button" class="outline-button" :aria-pressed="!administratorMode" :disabled="busy" @click="switchAccessMode(false)">일반 회원 모드</button>
+              <button type="button" class="outline-button" :aria-pressed="administratorMode" :disabled="busy" @click="switchAccessMode(true)">관리자 모드</button>
+            </div>
             <form
               class="profile-settings-form"
               @submit.prevent="act(saveNickname)"
@@ -1052,6 +1059,7 @@
               <label
                 v-for="f in profileFields"
                 :key="f.key"
+                :style="{ '--profile-field-span': f.span || 12 }"
                 :class="{
                   'character-profile-field-wide': f.long || f.key === 'quote',
                 }"
@@ -1374,6 +1382,7 @@ import {
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { request, save, remove, upload, imageBlob, exportAll } from "./api";
+import {accountRole,canUseAdminMode,readAdminMode,rememberAdminMode,setRequestMode,getRequestMode,memberForMode} from './access-mode.mjs';
 import { createLiveUpdates } from "./live-updates.mjs";
 import { createImageCache } from "./image-cache.mjs";
 import Portrait from "./Portrait.vue";
@@ -1421,6 +1430,7 @@ const busy = ref(false),
   error = ref(""),
   message = ref(""),
   dark = ref(false),
+  administratorMode = ref(false),
   modal = ref(""),
   draft = ref({}),
   file = ref(null),
@@ -1478,19 +1488,20 @@ const extraFields = [
   { key: "relationship_direction", label: "희망하는 자관 방향" },
 ];
 const profileFields = [
-  { key: "name", label: "이름" },
-  { key: "race", label: "종족", options: races },
-  { key: "age", label: "나이" },
-  { key: "origin", label: "출신지" },
+  { key: "name", label: "이름", span: 4 },
+  { key: "race", label: "종족", options: races, span: 2 },
+  { key: "age", label: "나이", span: 2 },
+  { key: "origin", label: "출신지", span: 4 },
   {
     key: "faction",
     label: "계열",
+    span: 3,
     options: ["mage", "templar"],
     optionLabels: { mage: "마법사", templar: "템플러" },
   },
-  { key: "affiliation", label: "소속", extra: true },
-  { key: "position", label: "직책·마탑 내 역할" },
-  { ...extraFields.find((f) => f.key === "circle_faction"), extra: true },
+  { key: "affiliation", label: "소속", extra: true, span: 3 },
+  { key: "position", label: "직책", span: 3 },
+  { ...extraFields.find((f) => f.key === "circle_faction"), extra: true, span: 3 },
   { key: "quote", label: "한 마디", extra: true },
   {
     ...extraFields.find((f) => f.key === "appearance"),
@@ -1533,8 +1544,10 @@ function setField(field, value) {
 const representative = computed(() =>
   byId(me.value?.representative_character_id),
 );
-const superAdmin = computed(() => me.value?.role === "superadmin");
-const admin = computed(() => ["admin", "superadmin"].includes(me.value?.role)),
+const canAdmin = computed(() => canUseAdminMode(me.value));
+const superAdmin = computed(() => administratorMode.value && accountRole(me.value) === "superadmin");
+const viewMe = computed(() => memberForMode(me.value, administratorMode.value));
+const admin = computed(() => canAdmin.value && administratorMode.value),
   mine = computed(() =>
     characters.value.filter((c) => c.owner_id === me.value?.id),
   ),
@@ -1652,6 +1665,28 @@ async function act(fn) {
     busy.value = false;
   }
 }
+async function switchAccessMode(enabled) {
+  if (!canAdmin.value || busy.value || administratorMode.value === enabled) return;
+  await act(async () => {
+    administratorMode.value = enabled;
+    setRequestMode(enabled ? 'admin' : 'member');
+    rememberAdminMode(me.value, enabled);
+    modal.value = '';
+    deleteTarget.value = null;
+    members.value = [];
+    history.value = [];
+    clearUrls();
+    me.value = await request('/me');
+    if (!enabled && route.path === '/admin') await router.replace('/home');
+    await refresh();
+  });
+}
+watch(canAdmin, allowed => {
+  if (!allowed) {
+    administratorMode.value = false;
+    setRequestMode('member');
+  }
+});
 function clearUrls() {
   imageCache.clear();
   urls.forEach((u) => URL.revokeObjectURL(u));
@@ -1674,7 +1709,9 @@ function refresh() {
 }
 async function refreshOnce() {
   const memberId = me.value?.id;
+  const mode = getRequestMode();
   const data = await request("/data");
+  if (mode !== getRequestMode()) { refreshAgain = true; return; }
   if (pageClosed || !memberId || me.value?.id !== memberId) return;
   const paths = [
     ...new Set(
@@ -1685,6 +1722,7 @@ async function refreshOnce() {
     ),
   ];
   const images = await imageCache.resolve(paths);
+  if (mode !== getRequestMode()) { refreshAgain = true; return; }
   if (pageClosed || me.value?.id !== memberId) return;
   urls.forEach((url) => URL.revokeObjectURL(url));
   urls = [];
@@ -1695,7 +1733,7 @@ async function refreshOnce() {
   media.value = data.media.map((m) => ({ ...m, image: images[m.path] || "" }));
   members.value = data.members;
   const currentMember = data.members.find((member) => member.id === memberId);
-  if (currentMember) me.value = { ...me.value, ...currentMember };
+  if (currentMember) me.value = { ...me.value, ...currentMember, account_role: currentMember.role };
   relationships.value = data.relationships;
   affection.value = data.affection;
   posts.value = data.posts;
@@ -2082,10 +2120,14 @@ watch(
 );
 onMounted(async () => {
   try {
-    me.value = await request("/me");
+    const account = await request("/me");
+    administratorMode.value = readAdminMode(account);
+    setRequestMode(administratorMode.value ? 'admin' : 'member');
+    me.value = account;
     nickname.value = me.value.nickname;
     representativeId.value = me.value.representative_character_id || null;
     await refresh();
+    if (route.path === '/admin' && !admin.value) await router.replace('/home');
     try {
       const destination = notificationPath(
         sessionStorage.getItem("circle-notification-destination"),

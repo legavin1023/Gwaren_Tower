@@ -22,7 +22,7 @@ import {roleplayRecords} from './roleplay-domain.mjs';
 const props=defineProps({characterIds:{type:Array,default:()=>[]},characters:Array,version:Number});
 const {scenes,messages,error,loading,sync}=useRoleplayFeed();
 const kind=ref(''),other=ref(''),faction=ref(''),statuses={active:'진행 중',paused:'일시 중단',ended:'종료',archived:'보관'};
-const records=computed(()=>roleplayRecords(scenes.value,messages.value,props.characterIds));
+const records=computed(()=>roleplayRecords(scenes.value,messages.value,props.characterIds,props.characters));
 const filtered=computed(()=>records.value.filter(record=>{
  const kindMatches=!kind.value||(kind.value==='active'&&record.type==='scene'&&['active','paused'].includes(record.status))||(kind.value==='ended'&&['ended','archived'].includes(record.status))||(kind.value==='timeline'&&record.type==='timeline'&&record.rows.some(row=>!row.parent_id&&props.characterIds.includes(row.character_id)))||(kind.value==='reply'&&record.rows.some(row=>row.parent_id&&props.characterIds.includes(row.character_id)));
  return kindMatches&&(!other.value||record.character_ids.includes(other.value))&&(!faction.value||record.character_ids.some(id=>!props.characterIds.includes(id)&&props.characters.find(character=>character.id===id)?.faction===faction.value));

@@ -196,6 +196,37 @@ test('roleplay incremental API bounds change pages and catches up without missin
  }finally{env.DB.db.close();}
 });
 
+test('admins can use member mode without changing account roles, and mode headers never promote ordinary members',async()=>{
+ const env=await fixture();try{
+ const memberMode={'X-Circle-Mode':'member'},adminMode={'X-Circle-Mode':'admin'};
+ const own=(await call(env,'/characters','root','POST',{name:'관리자의 캐릭터',faction:'mage'})).data;
+ const other=(await call(env,'/characters','one','POST',{name:'다른 오너 캐릭터',faction:'templar'})).data;
+ const me=(await call(env,'/me','root','GET',undefined,memberMode)).data;
+ assert.equal(me.role,'member');assert.equal(me.account_role,'superadmin');
+ const data=(await call(env,'/data','root','GET',undefined,memberMode)).data;
+ assert.equal(data.members.find(row=>row.id==='one').email,undefined);
+ assert.equal((await call(env,'/history','root','GET',undefined,memberMode)).status,403);
+ assert.equal((await call(env,'/export','root','GET',undefined,memberMode)).status,403);
+ assert.equal((await call(env,'/characters/'+own.id,'root','DELETE',undefined,memberMode)).status,403);
+ assert.equal((await call(env,'/characters','root','POST',{...other,name:'무단 수정'},memberMode)).status,403);
+ assert.equal((await call(env,'/posts','root','POST',{title:'공지',category:'notice'},memberMode)).status,403);
+ assert.equal((await call(env,'/members','root','POST',{email:'invite@example.test',nickname:'초대',role:'member'},memberMode)).status,403);
+ assert.equal((await call(env,'/characters','root','POST',{...own,name:'회원처럼 내 캐릭터 수정'},memberMode)).status,200);
+ const profile=(await call(env,'/profile','root','POST',{nickname:'오너처럼 사용'},memberMode)).data;
+ assert.equal(profile.role,'member');assert.equal(profile.account_role,'superadmin');
+ assert.equal((await env.DB.prepare("SELECT role FROM members WHERE id='root'").first()).role,'admin');
+ assert.equal((await call(env,'/me','root','GET',undefined,adminMode)).data.role,'superadmin');
+ assert.equal((await call(env,'/history','root','GET',undefined,adminMode)).status,200);
+ assert.equal((await call(env,'/characters','root','POST',{...other,name:'관리자 모드에서 수정'},adminMode)).status,200);
+ assert.equal((await call(env,'/me','one','GET',undefined,adminMode)).data.role,'member');
+ assert.equal((await call(env,'/export','one','GET',undefined,adminMode)).status,403);
+ assert.equal((await call(env,'/characters/'+own.id,'one','DELETE',undefined,adminMode)).status,403);
+ const scene=(await call(env,'/roleplay/scenes','one','POST',{title:'허가한 운영자만',visibility:'participants',participant_ids:[other.id],admin_ids:['root']})).data;
+ assert.equal((await call(env,'/roleplay/sync','root','GET',undefined,memberMode)).data.scenes.some(row=>row.id===scene.id),false);
+ assert.equal((await call(env,'/roleplay/sync','root','GET',undefined,adminMode)).data.scenes.some(row=>row.id===scene.id),true);
+ }finally{env.DB.db.close();}
+});
+
 test('character deletion is reserved for admins while owners retain profile editing',async()=>{
  const env=await fixture();try{
  const character=(await call(env,'/characters','one','POST',{name:'보호할 캐릭터',faction:'mage'})).data;

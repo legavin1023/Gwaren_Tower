@@ -41,7 +41,7 @@
       <h3>{{ tabs.find(item => item.key === tab)?.label }}</h3>
       <template v-if="tab === 'timeline'">
         <article v-for="root in pagedRoots" :key="root.id" class="card rp-thread-card">
-          <RoleplayMessage :message="{...root,body:root.body.slice(0,450)+(root.body.length>450?'…':'')}" :characters="characters" :messages="messages" :me="me" :images="images" can-reply @reply="openThread(root)" @edit="openThread(root,true)" @remove="askDelete('messages',root)" />
+          <RoleplayMessage :message="root" :characters="characters" :messages="messages" :me="me" :images="images" can-reply preview @reply="openThread(root)" @edit="openThread(root,true)" @remove="askDelete('messages',root)" />
           <router-link :to="'/roleplay/thread/'+root.id">대화 보기 · 답글 {{ threadMessages(root.id).filter(item => item.id !== root.id && !item.deleted_at).length }}개</router-link>
           <small class="muted">최근 활동 {{ date(activity(root)) }}</small>
         </article>
@@ -59,7 +59,7 @@
         <p v-if="!filteredScenes.length && !loading" class="empty-state">조건에 맞는 장면이 없습니다.</p>
         <template v-if="tab === 'mine'">
           <h3>참여한 자유 역극</h3>
-          <router-link v-for="root in myRoots" :key="root.id" :to="'/roleplay/thread/'+root.id" class="card rp-record-row"><span>{{ root.deleted_at ? '삭제된 원글의 대화' : root.body.slice(0,120) || '이미지 역극' }}</span><small>{{ date(activity(root)) }}</small></router-link>
+          <router-link v-for="root in myRoots" :key="root.id" :to="'/roleplay/thread/'+root.id" class="card rp-record-row"><span>{{ root.deleted_at ? '삭제된 원글의 대화' : roleplayPlainText(root.body,characters,120) || '이미지 역극' }}</span><small>{{ date(activity(root)) }}</small></router-link>
           <p v-if="!myRoots.length && !loading" class="muted">참여한 자유 역극이 없습니다.</p>
         </template>
       </template>
@@ -110,6 +110,7 @@ import {ref,computed,watch,onMounted,onBeforeUnmount,nextTick} from 'vue';
 import {useRoute,useRouter} from 'vue-router';
 import {request} from './api';
 import {useRoleplayFeed,uploadRoleplay} from './roleplay-client.mjs';
+import {roleplayPlainText} from './roleplay-domain.mjs';
 import Portrait from './Portrait.vue';
 import RoleplayEditor from './RoleplayEditor.vue';
 import RoleplayMessage from './RoleplayMessage.vue';
@@ -135,7 +136,7 @@ const messagePages=computed(()=>Math.max(1,Math.ceil(visibleMessages.value.lengt
 const pagedMessages=computed(()=>visibleMessages.value.slice((page.value-1)*50,page.value*50));
 function byId(id){return props.characters.find(character=>character.id===id);}
 function chronological(a,b){return a.created_at.localeCompare(b.created_at)||a.id.localeCompare(b.id);}
-function date(value){return new Date(value).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'});}
+function date(value){return new Date(value).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});}
 function day(value){return new Date(value).toLocaleDateString('ko-KR',{timeZone:'Asia/Seoul'});}
 function threadMessages(id){return messages.value.filter(message=>message.thread_id===id);}
 function activity(item){return messages.value.filter(message=>item.thread_id?message.thread_id===item.id:message.scene_id===item.id).reduce((at,message)=>message.updated_at>at?message.updated_at:at,item.updated_at);}
@@ -178,7 +179,7 @@ async function performDelete(){await act(async()=>{const {type,row}=deleteTarget
 async function savePreference(){await act(()=>request('/roleplay/preferences',{method:'POST',body:JSON.stringify({mode:preference.value})}));}
 async function markRead(){const last=allCurrentMessages.value.at(-1);if(last)await act(()=>request('/roleplay/read',{method:'POST',body:JSON.stringify({message_id:last.id})}));}
 function exportUrl(format){return '/api/roleplay/export?'+(currentScene.value?'scene='+currentScene.value.id:'thread='+currentThread.value.id)+'&format='+format+(hideOoc.value?'&ooc=hide':'');}
-async function showParent(message){if(hideOoc.value&&!message.character_id)hideOoc.value=false;const index=visibleMessages.value.findIndex(row=>row.id===message.id);if(index>=0)page.value=Math.floor(index/50)+1;await nextTick();document.getElementById('rp-message-'+message.id)?.scrollIntoView({block:'center'});}
+async function showParent(message){if(hideOoc.value&&!message.character_id){hideOoc.value=false;await nextTick();}const index=visibleMessages.value.findIndex(row=>row.id===message.id);if(index>=0)page.value=Math.floor(index/50)+1;await nextTick();document.getElementById('rp-message-'+message.id)?.scrollIntoView({block:'center'});}
 watch(()=>route.path,()=>{page.value=1;reply.value=null;editing.value=pendingEdit;pendingEdit=null;notice.value='';});
 watch([query,filterCharacter,filterFaction,fromDate,toDate,sort,hideOoc],()=>{page.value=1;});
 watch(()=>props.version,async()=>{const before=new Set(messages.value.map(message=>message.id));await sync();const count=messages.value.filter(message=>!before.has(message.id)&&message.owner_id!==props.me.id).length;if(count)notice.value='새 메시지 '+count+'개가 도착했습니다. 읽던 위치는 그대로 유지됩니다.';});

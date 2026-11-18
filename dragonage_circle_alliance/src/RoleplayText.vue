@@ -4,8 +4,8 @@
       <hr v-if="line.trim() === '---'" />
       <component :is="line.startsWith('> ') ? 'blockquote' : 'p'" v-else>
         <template v-for="(part,i) in inlineRoleplay(line.startsWith('> ') ? line.slice(2) : line)" :key="i">
-          <strong v-if="part.kind === 'strong'">{{ part.text }}</strong>
-          <em v-else-if="part.kind === 'em'">{{ part.text }}</em>
+          <strong v-if="part.kind === 'strong'"><MentionText :text="part.text" :characters="characters" /></strong>
+          <em v-else-if="part.kind === 'em'"><MentionText :text="part.text" :characters="characters" /></em>
           <MentionText v-else :text="part.text" :characters="characters" />
         </template>
         <br v-if="!line" />
