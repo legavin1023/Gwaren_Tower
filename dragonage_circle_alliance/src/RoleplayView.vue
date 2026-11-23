@@ -14,7 +14,7 @@
     <details class="rp-list-options"><summary>필터 · 알림 설정</summary>
     <div class="rp-filter-grid">
       <label>등장 캐릭터<select v-model="filterCharacter" class="form-input"><option value="">전체</option><option v-for="character in characters" :key="character.id" :value="character.id">{{ character.name }}</option></select></label>
-      <label>진영<select v-model="filterFaction" class="form-input"><option value="">전체</option><option value="mage">마법사</option><option value="templar">템플러</option></select></label>
+      <label>소속<select v-model="filterFaction" class="form-input"><option value="">전체</option><option v-for="option in affiliationOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
       <label>시작일<input v-model="fromDate" type="date" class="form-input" /></label>
       <label>종료일<input v-model="toDate" type="date" class="form-input" /></label>
       <label>정렬<select v-model="sort" class="form-input"><option value="activity">최근 활동순</option><option value="created">최신 작성순</option></select></label>
@@ -53,10 +53,10 @@
     </form>
 
     <template v-if="!detail">
-      <h3>{{ tabs.find(item => item.key === tab)?.label }}</h3>
+      <div class="rp-feed-heading"><h3>{{ tabs.find(item => item.key === tab)?.label }}</h3><button class="outline-button rp-new-free" aria-label="새 자유 역극 작성" @click="startFree">＋ 새 자유 역극</button></div>
       <template v-if="tab === 'timeline'">
         <article v-for="root in pagedRoots" :key="root.id" class="card rp-thread-card">
-          <RoleplayMessage :message="root" :characters="characters" :messages="messages" :me="me" :images="images" preview @edit="openThread(root,true)" @remove="askDelete('messages',root)" />
+          <RoleplayMessage :message="root" :characters="characters" :messages="messages" :me="me" :images="images" original preview @edit="openThread(root,true)" @remove="askDelete('messages',root)" />
           <router-link :to="'/roleplay/thread/'+root.id">대화 보기 · 답글 {{ threadMessages(root.id).filter(item => item.id !== root.id && !item.deleted_at).length }}개</router-link>
         </article>
         <p v-if="!filteredRoots.length && !loading" class="empty-state">아직 역극이 없습니다. 새 이야기를 시작해 보세요.</p>
@@ -103,10 +103,12 @@
         <button class="outline-button" @click="markRead">여기까지 읽음</button>
         <a class="outline-button" :href="exportUrl('text')">텍스트 저장</a><a class="outline-button" :href="exportUrl('html')">HTML 저장</a>
       </div></details>
-      <section class="card rp-log" aria-label="역극 대화">
-        <template v-for="(message,index) in pagedMessages" :key="message.id">
-          <p v-if="index === 0 || day(message.created_at) !== day(pagedMessages[index-1].created_at)" class="rp-day-divider">{{ day(message.created_at) }}</p>
-          <RoleplayMessage :message="message" :characters="characters" :messages="messages" :me="me" :images="images" :can-reply="canWrite" @reply="setReply" @edit="setEdit" @remove="askDelete('messages',$event)" @parent="showParent" />
+      <RoleplayMessage v-if="currentThread && (!hideOoc || currentThread.character_id)" :message="currentThread" :characters="characters" :messages="messages" :me="me" :images="images" :can-reply="canWrite" original @reply="setReply" @edit="setEdit" @remove="askDelete('messages',$event)" />
+      <div class="rp-comments-heading"><strong>{{ currentThread ? '댓글' : '대화' }} {{ visibleMessages.filter(row => !row.deleted_at).length }}</strong><span>등록순</span></div>
+      <button v-if="currentScene && canWrite" class="text-button rp-new-message" @click="startMessage">＋ 대화 쓰기</button>
+      <section class="card rp-log" :aria-label="currentThread ? '역극 댓글' : '역극 대화'">
+        <template v-for="message in pagedMessages" :key="message.id">
+          <RoleplayMessage :message="message" :characters="characters" :messages="messages" :me="me" :images="images" :can-reply="canWrite" :thread-root="currentThread" :nested="!!message.parent_id && message.parent_id !== currentThread?.id" @reply="setReply" @edit="setEdit" @remove="askDelete('messages',$event)" @parent="showParent" />
         </template>
         <p v-if="!visibleMessages.length" class="muted">아직 메시지가 없습니다.</p>
       </section>
@@ -117,20 +119,21 @@
     <p v-if="loading" class="muted">역극 기록을 불러오는 중…</p>
     <section v-if="deleteTarget" class="card rp-delete-confirm" role="alertdialog" aria-label="역극 삭제 확인"><p>이 {{ deleteTarget.type === 'scenes' ? '장면' : '메시지' }}을 삭제할까요? 기록은 복구를 위해 보관됩니다.</p><button class="secondary-button" :disabled="busy" @click="performDelete">삭제</button> <button class="outline-button" :disabled="busy" @click="deleteTarget = null">취소</button></section>
     </div>
-    <div v-if="detail ? (currentScene || currentThread) && (canWrite || editing) : tab === 'timeline'" class="rp-composer-dock">
+    <div v-if="detail ? (currentScene || currentThread) && ((canWrite && (reply || writing)) || editing) : tab === 'timeline' && writing" class="rp-composer-dock">
       <RoleplayEditor v-if="detail" ref="composer" :key="editorContext" :context="editorContext" :me="me" :actors="sceneActors" :characters="characters" :scene-id="currentScene?.id" :reply="reply" :editing="editing" compact @cancel="cancelEditor" @saved="afterSave" />
-      <template v-else><span class="rp-composer-title">새 자유 역극</span><RoleplayEditor ref="composer" key="timeline-new" context="timeline-new" :me="me" :actors="mine" :characters="characters" compact @saved="afterSave" /></template>
+      <template v-else><span class="rp-composer-title">새 자유 역극</span><RoleplayEditor ref="composer" key="timeline-new" context="timeline-new" :me="me" :actors="mine" :characters="characters" compact @cancel="cancelEditor" @saved="afterSave" /></template>
     </div>
     </div>
     <aside v-if="detail && peopleOpen" class="rp-people-panel" aria-label="참여 캐릭터 정보">
       <div class="rp-list-heading"><h3>참여 캐릭터</h3><button class="text-button" aria-label="참여 캐릭터 닫기" @click="peopleOpen = false">×</button></div>
-      <router-link v-for="character in participantCharacters" :key="character.id" :to="'/characters/'+character.id" class="rp-person"><Portrait :character="character" /><div><strong>{{ character.name }}</strong><small>{{ [character.faction === 'mage' ? '마법사' : '템플러',character.race,character.age].filter(Boolean).join(' · ') }}</small><p v-if="character.affiliation">{{ character.affiliation }}</p></div></router-link>
+      <router-link v-for="character in participantCharacters" :key="character.id" :to="'/characters/'+character.id" class="rp-person"><Portrait :character="character" /><div><strong>{{ character.name }}</strong><small>{{ [affiliationLabel(character),character.race,character.age].filter(Boolean).join(' · ') }}</small><p v-if="character.affiliation">{{ character.affiliation }}</p></div></router-link>
       <p v-if="!participantCharacters.length" class="muted">오너 대화입니다.</p>
     </aside>
     </div>
   </section>
 </template>
 <script setup>
+import {affiliationOptions,affiliationType,affiliationLabel} from './affiliation.mjs';
 import {ref,computed,watch,onMounted,onBeforeUnmount,nextTick} from 'vue';
 import {useRoute,useRouter} from 'vue-router';
 import {request} from './api';
@@ -143,7 +146,7 @@ const props=defineProps({me:Object,characters:Array,members:Array,version:Number
 const route=useRoute(),router=useRouter(),{scenes,messages,images,reads,error,loading,sync,ensureImages}=useRoleplayFeed();
 const tabs=[{key:'timeline',label:'전체 타임라인'},{key:'active',label:'진행 중'},{key:'mine',label:'내가 참여한 역극'},{key:'archive',label:'역극 보관소'}];
 const statuses={active:'진행 중',paused:'일시 중단',ended:'종료',archived:'보관'};
-const pageElement=ref(null),transcriptElement=ref(null),composer=ref(null),viewportHeight=ref(680),listOpen=ref(false),peopleOpen=ref(false);
+const pageElement=ref(null),transcriptElement=ref(null),composer=ref(null),viewportHeight=ref(680),listOpen=ref(false),peopleOpen=ref(false),writing=ref(false);
 const tab=ref('timeline'),query=ref(''),filterCharacter=ref(''),filterFaction=ref(''),fromDate=ref(''),toDate=ref(''),sort=ref('activity'),page=ref(1),hideOoc=ref(false),reply=ref(null),editing=ref(null),sceneDraft=ref(null),coverFile=ref(null),removeCover=ref(false),busy=ref(false),actionError=ref(''),notice=ref(''),preference=ref('all'),joinCharacter=ref(''),inviteCharacter=ref(''),deleteTarget=ref(null);
 let pendingEdit=null;
 const mine=computed(()=>props.characters.filter(character=>character.owner_id===props.me.id));
@@ -158,20 +161,19 @@ const sceneActors=computed(()=>currentScene.value?mine.value.filter(character=>c
 const editorContext=computed(()=>['scene',currentScene.value?.id||'thread',currentThread.value?.id||'',editing.value?'edit:'+editing.value.id:reply.value?'reply:'+reply.value.id:'new'].join(':'));
 const allCurrentMessages=computed(()=>messages.value.filter(message=>currentScene.value?message.scene_id===currentScene.value.id:currentThread.value?message.thread_id===currentThread.value.id: false).sort(chronological));
 const participantCharacters=computed(()=>[...new Set([...(currentScene.value?.participant_ids||[]),...allCurrentMessages.value.map(row=>row.character_id)].filter(Boolean))].map(byId).filter(Boolean));
-const visibleMessages=computed(()=>allCurrentMessages.value.filter(message=>!hideOoc.value||message.character_id));
+const visibleMessages=computed(()=>allCurrentMessages.value.filter(message=>message.id!==currentThread.value?.id&&(!hideOoc.value||message.character_id)));
 const messagePages=computed(()=>Math.max(1,Math.ceil(visibleMessages.value.length/50)));
 const pagedMessages=computed(()=>visibleMessages.value.slice((page.value-1)*50,page.value*50));
 function byId(id){return props.characters.find(character=>character.id===id);}
 function chronological(a,b){return a.created_at.localeCompare(b.created_at)||a.id.localeCompare(b.id);}
 function date(value){return new Date(value).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});}
-function day(value){return new Date(value).toLocaleDateString('ko-KR',{timeZone:'Asia/Seoul'});}
 function threadMessages(id){return messages.value.filter(message=>message.thread_id===id);}
 function activity(item){return messages.value.filter(message=>item.thread_id?message.thread_id===item.id:message.scene_id===item.id).reduce((at,message)=>message.updated_at>at?message.updated_at:at,item.updated_at);}
 function matches(item,rows) {
  const ids=new Set([...(item.participant_ids||[]),...rows.map(message=>message.character_id)].filter(Boolean));
  const words=[item.title,item.location,item.description,...rows.filter(message=>!message.deleted_at).map(message=>message.body)].join(' ').toLowerCase();
  const dateRows=rows.length?rows:[item];
- return (!query.value||words.includes(query.value.toLowerCase()))&&(!filterCharacter.value||ids.has(filterCharacter.value))&&(!filterFaction.value||[...ids].some(id=>byId(id)?.faction===filterFaction.value))&&(!fromDate.value||dateRows.some(row=>row.created_at.slice(0,10)>=fromDate.value))&&(!toDate.value||dateRows.some(row=>row.created_at.slice(0,10)<=toDate.value));
+ return (!query.value||words.includes(query.value.toLowerCase()))&&(!filterCharacter.value||ids.has(filterCharacter.value))&&(!filterFaction.value||[...ids].some(id=>affiliationType(byId(id))===filterFaction.value))&&(!fromDate.value||dateRows.some(row=>row.created_at.slice(0,10)>=fromDate.value))&&(!toDate.value||dateRows.some(row=>row.created_at.slice(0,10)<=toDate.value));
 }
 const filteredRoots=computed(()=>messages.value.filter(message=>!message.scene_id&&!message.parent_id&&(!message.deleted_at||threadMessages(message.id).some(row=>!row.deleted_at))&&matches(message,threadMessages(message.id))).sort((a,b)=>(sort.value==='created'?b.created_at:activity(b)).localeCompare(sort.value==='created'?a.created_at:activity(a))));
 const rootPages=computed(()=>Math.max(1,Math.ceil(filteredRoots.value.length/20))),pagedRoots=computed(()=>filteredRoots.value.slice((page.value-1)*20,page.value*20));
@@ -188,14 +190,16 @@ const sidebarEntries=computed(()=>{
  if(detail.value||['timeline','mine'].includes(tab.value))entries.push(...roots.map(root=>({path:'/roleplay/thread/'+root.id,title:root.deleted_at?'삭제된 원글의 대화':roleplayPlainText(root.body,props.characters,50)||'이미지 역극',subtitle:'자유 역극',people:[...new Set(threadMessages(root.id).map(row=>byId(row.character_id)?.name||row.author_name))].filter(Boolean).join(' · '),at:activity(root)})));
  return entries.sort((a,b)=>b.at.localeCompare(a.at));
 });
-const visibleImagePaths=computed(()=>detail.value?[currentScene.value?.image_path,...pagedMessages.value.flatMap(row=>row.attachments)]:tab.value==='timeline'?pagedRoots.value.flatMap(row=>row.attachments):filteredScenes.value.map(scene=>scene.image_path));
+const visibleImagePaths=computed(()=>detail.value?[currentScene.value?.image_path,...(currentThread.value?.attachments||[]),...pagedMessages.value.flatMap(row=>row.attachments)]:tab.value==='timeline'?pagedRoots.value.flatMap(row=>row.attachments):filteredScenes.value.map(scene=>scene.image_path));
 watch(visibleImagePaths,paths=>ensureImages(paths),{immediate:true});
 function unread(scene){const read=reads.value.find(read=>read.scope==='scene:'+scene.id);return messages.value.some(message=>message.scene_id===scene.id&&message.owner_id!==props.me.id&&!message.deleted_at&&(!read||message.created_at>read.updated_at));}
-function navigate(key){tab.value=key;page.value=1;listOpen.value=false;router.push('/roleplay');}
-function cancelEditor(){reply.value=null;editing.value=null;}
+function navigate(key){cancelEditor();tab.value=key;page.value=1;listOpen.value=false;router.push('/roleplay');}
+function cancelEditor(){writing.value=false;reply.value=null;editing.value=null;}
 async function focusComposer(){await nextTick();composer.value?.focus();}
-function setReply(message){editing.value=null;reply.value=message;focusComposer();}
-function setEdit(message){reply.value=null;editing.value=message;focusComposer();}
+async function startFree(){if(route.path!=='/roleplay'){await router.push('/roleplay');await nextTick();}tab.value='timeline';listOpen.value=false;writing.value=true;focusComposer();}
+function startMessage(){cancelEditor();writing.value=true;focusComposer();}
+function setReply(message){writing.value=false;editing.value=null;reply.value=message;focusComposer();}
+function setEdit(message){writing.value=false;reply.value=null;editing.value=message;focusComposer();}
 function openThread(message,edit=false){pendingEdit=edit?message:null;router.push('/roleplay/thread/'+message.thread_id);}
 async function afterSave(){cancelEditor();await sync();if(detail.value){page.value=messagePages.value;await nextTick();const element=transcriptElement.value;if(element)element.scrollTop=element.scrollHeight;}else notice.value='역극을 저장했습니다.';}
 async function act(fn){if(busy.value)return;busy.value=true;actionError.value='';try{await fn();await sync();}catch(e){actionError.value=e.message;}finally{busy.value=false;}}
@@ -215,7 +219,7 @@ async function savePreference(){await act(()=>request('/roleplay/preferences',{m
 async function markRead(){const last=allCurrentMessages.value.at(-1);if(last)await act(()=>request('/roleplay/read',{method:'POST',body:JSON.stringify({message_id:last.id})}));}
 function exportUrl(format){return '/api/roleplay/export?'+(currentScene.value?'scene='+currentScene.value.id:'thread='+currentThread.value.id)+'&format='+format+(hideOoc.value?'&ooc=hide':'');}
 async function showParent(message){if(hideOoc.value&&!message.character_id){hideOoc.value=false;await nextTick();}const index=visibleMessages.value.findIndex(row=>row.id===message.id);if(index>=0)page.value=Math.floor(index/50)+1;await nextTick();document.getElementById('rp-message-'+message.id)?.scrollIntoView({block:'center'});}
-watch(()=>route.path,async()=>{page.value=1;reply.value=null;editing.value=pendingEdit;pendingEdit=null;notice.value='';listOpen.value=false;await nextTick();measureViewport();if(transcriptElement.value)transcriptElement.value.scrollTop=0;});
+watch(()=>route.path,async()=>{page.value=1;writing.value=false;reply.value=null;editing.value=pendingEdit;pendingEdit=null;notice.value='';listOpen.value=false;await nextTick();measureViewport();if(transcriptElement.value)transcriptElement.value.scrollTop=0;});
 watch(tab,async()=>{await nextTick();measureViewport();});
 watch([query,filterCharacter,filterFaction,fromDate,toDate,sort,hideOoc],()=>{page.value=1;});
 watch(()=>props.version,async()=>{const before=new Set(messages.value.map(message=>message.id));await sync();const count=messages.value.filter(message=>!before.has(message.id)&&message.owner_id!==props.me.id).length;if(count)notice.value='새 메시지 '+count+'개가 도착했습니다. 읽던 위치는 그대로 유지됩니다.';});

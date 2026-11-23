@@ -1,9 +1,10 @@
+import {affiliationType} from './affiliation.mjs';
 import {themeColor} from './character-theme.mjs';
 export function graphElements(characters, relationships, faction='', type='') {
- const visible=characters.filter(c=>!c.deleted_at && (!faction || c.faction===faction));
+ const visible=characters.filter(c=>!c.deleted_at && (!faction || affiliationType(c)===faction));
  const ids=new Set(visible.map(c=>c.id));
  return [
- ...visible.map(c=>({data:{id:c.id,label:c.name,faction:c.faction,image:c.image||'',themeColor:themeColor(c)}})),
+ ...visible.map(c=>({data:{id:c.id,label:c.name,faction:affiliationType(c),image:c.image||'',themeColor:themeColor(c)}})),
  ...relationships.filter(r=>!r.deleted_at && r.status==='approved' && ids.has(r.source_id) && ids.has(r.target_id) && (!type || r.kind===type)).map(r=>({data:{id:'r-'+r.id,source:r.source_id,target:r.target_id,label:r.name,directed:r.directed,description:r.description}}))
  ];
 }

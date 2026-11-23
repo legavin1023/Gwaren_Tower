@@ -1,3 +1,4 @@
+import {affiliationType,affiliationLabel} from '../src/affiliation.mjs';
 import { fail, isAdmin, validateImage } from './policy.mjs';
 import { publishRealtime, requestClient } from './realtime.mjs';
 import { sendNotifications, mentionedCharacters } from './notifications.mjs';
@@ -16,7 +17,7 @@ const text = (value,max,required=false) => {
 };
 const decode = (table,row) => row ? {...row,...Object.fromEntries((table==='rp_scenes'?['participant_ids','member_ids','admin_ids']:['attachments']).map(key=>[key,JSON.parse(row[key]||'[]')]))} : null;
 const get = async (env,table,id) => decode(table,await env.DB.prepare('SELECT * FROM '+table+' WHERE id=?').bind(id).first());
-const characterRows = async env => (await env.DB.prepare('SELECT id,owner_id,name,faction,deleted_at FROM characters').all()).results;
+const characterRows = async env => (await env.DB.prepare('SELECT id,owner_id,name,faction,extra,deleted_at FROM characters').all()).results;
 export function canReadScene(me,scene,characters) {
  return !!scene && !scene.deleted_at && (scene.visibility==='members'||scene.owner_id===me.id||scene.member_ids.includes(me.id)||
   scene.participant_ids.some(id=>characters.some(c=>c.id===id&&c.owner_id===me.id))||(isAdmin(me)&&scene.admin_ids.includes(me.id)));
@@ -100,7 +101,7 @@ export async function roleplayRoute(req,env,me,ctx) {
   if(sceneId)title=(await accessibleScene(env,me,sceneId,characters)).title;
   else {const root=await get(env,'rp_messages',threadId);if(!root||root.scene_id)fail('자유 역극을 찾을 수 없습니다.',404);}
   const rows=(await env.DB.prepare('SELECT * FROM rp_messages WHERE '+(sceneId?'scene_id=?':'thread_id=? AND scene_id IS NULL')+' ORDER BY created_at,id').bind(sceneId||threadId).all()).results;
-  const output=[title,...rows.filter(row=>!row.deleted_at&&(url.searchParams.get('ooc')!=='hide'||row.character_id)).map(row=>`${row.created_at} · ${row.character_id?'['+(row.faction==='mage'?'마법사':'템플러')+']':'[OOC / 오너]'} ${row.author_name}\n${row.body}`)].join('\n\n');
+  const output=[title,...rows.filter(row=>!row.deleted_at&&(url.searchParams.get('ooc')!=='hide'||row.character_id)).map(row=>`${row.created_at} · ${row.character_id?'['+affiliationLabel({faction:row.faction})+']':'[OOC / 오너]'} ${row.author_name}\n${row.body}`)].join('\n\n');
   const html=url.searchParams.get('format')==='html',escape=value=>value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
   return new Response(html?'<!doctype html><html lang="ko"><meta charset="utf-8"><title>'+escape(title)+'</title><style>body{max-width:80ch;margin:40px auto;padding:20px;font:16px/1.9 sans-serif}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><pre>'+escape(output)+'</pre></html>':output,{headers:{'Content-Type':html?'text/html; charset=utf-8':'text/plain; charset=utf-8','Content-Disposition':'attachment; filename="roleplay.'+(html?'html':'txt')+'"','Cache-Control':'no-store','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; sandbox"}});
  }
@@ -220,7 +221,7 @@ export async function roleplayRoute(req,env,me,ctx) {
   await checkAssets(env,me,attachments.filter(path=>!old?.attachments.includes(path)),sceneId);
   const body=text(input.body??old?.body??'',20000);if(!body.trim()&&!attachments.length)fail('본문 또는 이미지를 입력하세요.');
   const id=old?.id||uuid(),row={id,owner_id:me.id,character_id:characterId,scene_id:sceneId,parent_id:parentId,thread_id:old?.thread_id||parent?.thread_id||id,
-   author_name:old?.author_name||character?.name||me.nickname,faction:old?.faction||character?.faction||null,body,attachments,request_id:old?.request_id||input.request_id,created_at:old?.created_at||stamp(),updated_at:stamp(),deleted_at:null,revision:(old?.revision||0)+1};
+   author_name:old?.author_name||character?.name||me.nickname,faction:old?.faction||(character?affiliationType({...character,extra:JSON.parse(character.extra||'{}')}):null),body,attachments,request_id:old?.request_id||input.request_id,created_at:old?.created_at||stamp(),updated_at:stamp(),deleted_at:null,revision:(old?.revision||0)+1};
   const recipients=new Map();
   if(!old) {
    if(scene){recipients.set(scene.owner_id,'scene');scene.member_ids.forEach(id=>recipients.set(id,'scene'));scene.participant_ids.forEach(id=>recipients.set(characters.find(c=>c.id===id)?.owner_id,'scene'));}

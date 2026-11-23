@@ -169,11 +169,10 @@
             /><select
               v-model="faction"
               class="form-input"
-              aria-label="진영 필터"
+              aria-label="소속"
             >
-              <option value="">모든 진영</option>
-              <option value="mage">마법사</option>
-              <option value="templar">템플러</option>
+              <option value="">모든 소속</option>
+              <option v-for="option in affiliationOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
             </select>
           </div>
           <label class="recruitment-filter"
@@ -202,7 +201,7 @@
               ><Portrait :character="c" />
               <div>
                 <span class="faction-badge" :class="c.faction">{{
-                  label(c.faction)
+                  affiliationLabel(c)
                 }}</span>
                 <h3 class="character-name">{{ c.name }}</h3>
                 <RecruitmentStatus :character="c" />
@@ -251,7 +250,7 @@
               <Portrait v-else :character="character" />
               <div class="profile-hero-info">
                 <h2 class="character-name" :title="character.name">{{ character.name }}</h2>
-                <span class="faction-badge" :class="character.faction">{{ label(character.faction) }}</span>
+                <span class="faction-badge" :class="character.faction">{{ affiliationLabel(character) }}</span>
                 <p v-if="character.position" :title="character.position">{{ character.position }}</p>
                 <small class="muted" :title="'오너 · '+owner(character.owner_id)">오너 · {{ owner(character.owner_id) }}</small>
                 <RecruitmentStatus :character="character" :title="character.extra?.recruitment_note" details />
@@ -1070,7 +1069,7 @@
                   @change="setField(f, $event.target.value)"
                   class="form-input"
                 >
-                  <option value="" :disabled="f.key === 'faction'">선택</option>
+                  <option value="" :disabled="f.key === 'affiliation_type'">선택</option>
                   <option
                     v-for="option in f.options"
                     :key="option"
@@ -1395,6 +1394,7 @@ import CharacterQuestions from "./CharacterQuestions.vue";
 import RelationshipArchive from "./RelationshipArchive.vue";
 const RoleplayView = defineAsyncComponent(() => import('./RoleplayView.vue'));
 const RoleplayRecords = defineAsyncComponent(() => import('./RoleplayRecords.vue'));
+import { affiliationOptions, affiliationType, affiliationLabel } from "./affiliation.mjs";
 import { recruitmentOptions } from "./recruitment.mjs";
 import { characterTheme } from "./character-theme.mjs";
 import AccountControls from "./AccountControls.vue";
@@ -1477,6 +1477,7 @@ const races = ["인간", "엘프", "드워프", "쿠나리"];
 const extraFields = [
   { key: "quote", label: "한 마디" },
   { key: "affiliation", label: "소속" },
+  { key: "affiliation_type", label: "소속" },
   {
     key: "circle_faction",
     label: "파벌",
@@ -1493,13 +1494,13 @@ const profileFields = [
   { key: "age", label: "나이", span: 2 },
   { key: "origin", label: "출신지", span: 4 },
   {
-    key: "faction",
-    label: "계열",
+    key: "affiliation_type",
+    label: "소속",
+    extra: true,
     span: 3,
-    options: ["mage", "templar"],
-    optionLabels: { mage: "마법사", templar: "템플러" },
+    options: affiliationOptions.map(option => option.value),
+    optionLabels: Object.fromEntries(affiliationOptions.map(option => [option.value, option.label])),
   },
-  { key: "affiliation", label: "소속", extra: true, span: 3 },
   { key: "position", label: "직책", span: 3 },
   { ...extraFields.find((f) => f.key === "circle_faction"), extra: true, span: 3 },
   { key: "quote", label: "한 마디", extra: true },
@@ -1531,6 +1532,7 @@ const ownerFields = [
   },
 ];
 function fieldValue(row, field) {
+  if (field.key === "affiliation_type") return affiliationType(row);
   return field.extra ? row.extra?.[field.key] || "" : row[field.key] || "";
 }
 function fieldDisplayValue(row, field) {
@@ -1564,7 +1566,7 @@ const admin = computed(() => canAdmin.value && administratorMode.value),
   filteredCharacters = computed(() =>
     characters.value.filter(
       (c) =>
-        (!faction.value || c.faction === faction.value) &&
+        (!faction.value || affiliationType(c) === faction.value) &&
         (!recruitmentFilter.value ||
           c.extra?.recruitment_status === recruitmentFilter.value) &&
         (!search.value ||
@@ -1615,9 +1617,6 @@ function own(row) {
 }
 function ownsId(id) {
   return byId(id)?.owner_id === me.value?.id;
-}
-function label(value) {
-  return value === "mage" ? "마법사" : "템플러";
 }
 function roleLabel(role) {
   return (

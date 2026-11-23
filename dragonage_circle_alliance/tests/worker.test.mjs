@@ -555,3 +555,14 @@ test('recruitment status and question lifecycle enforce owner permissions, revis
   assert.equal((await call(fresh,'/backup/restore',null,'POST',legacy,{Authorization:'Bearer restore-test'})).status,200);
  }finally{env.DB.db.close();fresh.DB.db.close();}
 });
+
+test('character affiliation supports four choices and preserves legacy profile settings without a schema change',async()=>{
+ const env=await fixture();try{
+  for(const type of ['mage','templar','chantry','tranquil']){
+   const result=await call(env,'/characters','one','POST',{name:type,faction:'mage',extra:{affiliation_type:type,affiliation:'기존 소속 메모',other:'유지'}});
+   assert.equal(result.status,200);assert.equal(result.data.extra.affiliation_type,type);assert.equal(result.data.extra.affiliation,'기존 소속 메모');assert.equal(result.data.faction,type==='templar'?'templar':'mage');
+  }
+  assert.equal((await call(env,'/characters','one','POST',{name:'Invalid',extra:{affiliation_type:'invalid'}})).status,400);
+  const rows=(await call(env,'/data')).data.characters;assert.deepEqual(rows.map(row=>row.extra.affiliation_type).sort(),['chantry','mage','templar','tranquil']);
+ }finally{env.DB.db.close();}
+});

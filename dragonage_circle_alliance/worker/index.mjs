@@ -1,3 +1,4 @@
+import {affiliationOptions} from '../src/affiliation.mjs';
 import {questionRecord} from './questions.mjs';
 import {roleplayRoute, roleplayTables, authorizeRoleplayFile,filterRoleplayHistory,restoreRoleplayHistory} from './roleplay.mjs';
 import {portraitHistory} from './portrait-history.mjs';
@@ -63,6 +64,7 @@ async function saveRecord(env,me,table,input,restore=false,ctx,clientId=''){
  if(table==='characters'){
   row.alias??='';row.extra??={};row.faction??='mage';for(const f of ['age','gender','race','origin','position','personality','background','goals','secrets'])row[f]??='';
   if(!row.extra||Array.isArray(row.extra)||typeof row.extra!=='object')fail('자유 설정은 객체로 입력하세요.');
+  if(row.extra.affiliation_type!==undefined){if(!affiliationOptions.some(option=>option.value===row.extra.affiliation_type))fail('소속을 마법사·성기사·성가회·안식자 중에서 선택하세요.');row.faction=row.extra.affiliation_type==='templar'?'templar':'mage';}
   if(row.extra.theme_color!=null&&row.extra.theme_color!==''&&!(typeof row.extra.theme_color==='string'&&/^#[0-9a-f]{6}$/i.test(row.extra.theme_color)))fail('테마색은 #으로 시작하는 6자리 색상 코드로 입력하세요.');
   if(typeof row.extra.theme_color==='string')row.extra.theme_color=row.extra.theme_color.toLowerCase();
   if(row.extra.recruitment_status!=null&&!['','open','specific','closed'].includes(row.extra.recruitment_status))fail('자관 모집 상태를 확인하세요.');

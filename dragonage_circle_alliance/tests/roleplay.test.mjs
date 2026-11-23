@@ -44,7 +44,7 @@ test('roleplay workspace toggles panels, keeps the composer separate, restores d
   const sources=['Portrait','MentionText','RoleplayText','RoleplayEditor','RoleplayMessage','RoleplayView'];
   for(const source of sources){
    const {descriptor}=parse(await readFile(new URL('../src/'+source+'.vue',import.meta.url),'utf8'));
-   let code=compileScript(descriptor,{id:source,inlineTemplate:true}).content;
+   let code=compileScript(descriptor,{id:source,inlineTemplate:true}).content.replaceAll("'./affiliation.mjs'","'../../src/affiliation.mjs'");
    code=code.replace(/import \{request,imageBlob\} from ['"]\.\/api['"];?/g,'const {request,imageBlob}=globalThis.__roleplayTestApi;');
    code=code.replace(/import \{request\} from ['"]\.\/api['"];?/g,'const {request}=globalThis.__roleplayTestApi;');
    code=code.replace(/from ['"]\.\/roleplay-client\.mjs['"]/g,"from './rp-client-"+process.pid+".mjs'");
@@ -78,11 +78,12 @@ test('roleplay workspace toggles panels, keeps the composer separate, restores d
   const hiddenId='765b4c5a-c03e-4dbf-892b-ccf7015ef879';
   const message=ref({id:'reply',owner_id:'one',character_id:'b',author_name:'이전 이름',faction:'templar',body:'hello **@[알리스터]('+hiddenId+')**',attachments:[],parent_id:'parent',created_at:'2026-11-17T01:00:00Z',revision:1});
   const all=[{id:'parent',author_name:'에이라',body:'원글 @[알리스터]('+hiddenId+')'},message.value,{id:'nested',parent_id:'reply',body:'답글'}],events=[],parents=[];
-  app=createApp({render:()=>h(Message,{message:message.value,messages:all,characters,me:{id:'one',role:'member'},images:{},canReply:true,onReply:row=>events.push(row),onParent:row=>parents.push(row)})});app.use(router);app.mount(host);
-  assert.equal(host.querySelector('.rp-avatar-link').getAttribute('href'),'/characters/b');assert.equal(host.querySelector('.character-name').getAttribute('href'),'/characters/b');assert.match(host.textContent,/에이라에게 답글/);
+  app=createApp({render:()=>h(Message,{message:message.value,messages:all,characters,me:{id:'one',role:'member'},images:{},canReply:true,nested:true,threadRoot:{id:'root',character_id:'b',owner_id:'one'},onReply:row=>events.push(row),onParent:row=>parents.push(row)})});app.use(router);app.mount(host);
+  assert.equal(host.querySelector('.rp-avatar-link').getAttribute('href'),'/characters/b');assert.equal(host.querySelector('.character-name').getAttribute('href'),'/characters/b');assert.match(host.textContent,/에이라에게/);
   assert.equal(host.querySelector('.rp-reply-reference').tagName,'BUTTON');
   assert.equal(host.querySelector('.rp-reply-reference').hasAttribute('href'),false);
-  assert.match(host.querySelector('.rp-reply-preview').textContent,/@알리스터/);
+  assert.equal(host.querySelector('.rp-reply-preview'),null);assert.equal(host.textContent.includes('원글'),false);
+  assert.equal(host.querySelector('.rp-author-badge').textContent,'작성자');assert.ok(host.querySelector('.rp-message-meta .rp-message-actions'));assert.equal(host.querySelector('.faction-badge'),null);
   assert.equal(host.textContent.includes(hiddenId),false);assert.equal(host.textContent.includes('@['),false);
   assert.equal(host.querySelector('.rp-body strong').textContent,'@알리스터');
   assert.equal(host.querySelector('time').textContent,'11.17 10:00');assert.match(host.querySelector('time').title,/2026/);
@@ -99,15 +100,30 @@ test('roleplay workspace toggles panels, keeps the composer separate, restores d
   await new Promise(resolve=>setImmediate(resolve));await nextTick();
   assert.equal(host.querySelectorAll('.rp-thread-card .rp-message-actions button').length,2); // edit and delete only
   assert.equal(host.querySelector('.rp-thread-card > a').textContent,'대화 보기 · 답글 1개');
+  assert.equal(host.querySelector('.rp-composer-dock'),null);
+  host.querySelector('.rp-new-free').click();await nextTick();await nextTick();await nextTick();
+  assert.ok(host.querySelector('.rp-composer-dock'));await change('.rp-composer-dock textarea','새 원글 임시저장');
+  host.querySelector('[aria-label="작성창 닫기"]').click();await nextTick();assert.equal(host.querySelector('.rp-composer-dock'),null);
+  host.querySelector('.rp-new-free').click();await nextTick();await nextTick();await nextTick();
+  assert.equal(host.querySelector('.rp-composer-dock textarea').value,'새 원글 임시저장');
   await router.push('/roleplay/thread/root');await nextTick();
-  assert.ok(host.querySelector('.rp-page--detail'));assert.equal(host.querySelectorAll('.rp-log .rp-message').length,2);
-  const dock=host.querySelector('.rp-composer-dock');assert.ok(dock);assert.equal(dock.closest('.rp-transcript'),null);assert.equal(dock.querySelector('textarea').getAttribute('rows'),'3');
+  assert.ok(host.querySelector('.rp-page--detail'));assert.equal(host.querySelectorAll('.rp-log .rp-message').length,1);
+  assert.equal(host.querySelectorAll('.rp-transcript > .rp-original').length,1);assert.equal(host.querySelectorAll('#rp-message-root').length,1);assert.equal(host.querySelector('.rp-comments-heading strong').textContent,'댓글 1');
+  assert.equal(host.querySelector('.rp-log .rp-is-reply'),null); // Replies to the original post stay at the first comment level.
+  assert.equal(host.querySelector('.rp-composer-dock'),null);
   host.querySelector('.rp-mobile-bar button').click();await nextTick();assert.equal(host.querySelector('.rp-mobile-bar button').getAttribute('aria-expanded'),'true');
   host.querySelector('.rp-list-entry').click();await nextTick();assert.equal(host.querySelector('.rp-mobile-bar button').getAttribute('aria-expanded'),'false');
   host.querySelector('.rp-people-toggle').click();await nextTick();assert.equal(host.querySelectorAll('.rp-person').length,2);
   host.querySelector('[aria-label="참여 캐릭터 닫기"]').click();await nextTick();assert.equal(host.querySelector('.rp-people-panel'),null);
   [...host.querySelectorAll('.rp-log button')].find(button=>button.textContent.trim()==='↳ 답글').click();await nextTick();await nextTick();
+  const dock=host.querySelector('.rp-composer-dock');assert.ok(dock);assert.equal(dock.closest('.rp-transcript'),null);assert.equal(dock.querySelector('textarea').getAttribute('rows'),'3');
   assert.match(dock.textContent,/에이라에게 답글/);assert.equal(document.activeElement,host.querySelector('.rp-composer-dock textarea'));
+  await change('.rp-composer-dock textarea','답글 초안');host.querySelector('[aria-label="작성창 닫기"]').click();await nextTick();assert.equal(host.querySelector('.rp-composer-dock'),null);
+  [...host.querySelectorAll('.rp-log button')].find(button=>button.textContent.trim()==='↳ 답글').click();await nextTick();await nextTick();
+  assert.equal(host.querySelector('.rp-composer-dock textarea').value,'답글 초안');
+  host.querySelector('.rp-composer-dock textarea').dispatchEvent(new window.KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true,cancelable:true}));await new Promise(resolve=>setImmediate(resolve));await nextTick();
+  assert.equal(host.querySelector('.rp-composer-dock'),null);
+  [...host.querySelectorAll('.rp-log button')].find(button=>button.textContent.trim()==='수정').click();await nextTick();await nextTick();assert.ok(host.querySelector('.rp-composer-dock'));assert.equal(host.querySelector('.rp-composer-dock textarea').value,'답변');
   app.unmount();app=null;
   // Privacy changes purge the cached text and images before any subsequent page load.
   let feed,syncCount=0,finishImage;

@@ -5,12 +5,12 @@
       <label><span :class="{'sr-only':compact}">작성 캐릭터</span>
         <select v-model="actor" class="form-input" :disabled="!!editing || busy">
           <option value="">OOC / 오너</option>
-          <option v-for="character in actors" :key="character.id" :value="character.id">{{ character.name }} — {{ character.faction === 'mage' ? '마법사' : '템플러' }}</option>
+          <option v-for="character in actors" :key="character.id" :value="character.id">{{ character.name }} — {{ affiliationLabel(character) }}</option>
         </select>
       </label>
       <span v-if="!actor" class="badge">OOC · {{ me.nickname }}</span>
     </div>
-    <p v-if="reply" class="rp-reply-reference">↳ {{ reply.author_name }}에게 답글 <button type="button" class="text-button" @click="$emit('cancel')">취소</button></p>
+    <p v-if="reply" class="rp-reply-reference">↳ {{ reply.author_name }}에게 답글</p>
     <label :for="inputId" :class="{'sr-only':compact}">{{ editing ? '메시지 수정' : '대사와 행동' }}</label>
     <textarea :id="inputId" v-model="body" class="form-textarea" :rows="compact ? 3 : 6" maxlength="20000" :disabled="busy" placeholder="대사를 적어주세요. 행동 묘사는 *이렇게* 쓸 수 있어요." />
     <details class="rp-editor-extras"><summary>이미지 · 멘션 · 미리보기<span v-if="attachments.length"> · 첨부 {{ attachments.length }}</span></summary>
@@ -33,11 +33,12 @@
     <div class="toolbar">
       <small class="muted rp-draft-status">{{ draftStatus }}<span class="rp-send-hint"> · Ctrl+Enter</span></small>
       <button class="primary-button" :disabled="busy || (!body.trim() && !attachments.length)">{{ busy ? '저장 중…' : editing ? '수정 저장' : '전송' }}</button>
-      <button v-if="editing" type="button" class="secondary-button" :disabled="busy" @click="$emit('cancel')">수정 취소</button>
+      <button v-if="editing || compact" type="button" class="secondary-button" aria-label="작성창 닫기" :disabled="busy" @click="$emit('cancel')">{{ editing ? '수정 취소' : '닫기' }}</button>
     </div>
   </form>
 </template>
 <script setup>
+import {affiliationOptions,affiliationType,affiliationLabel} from './affiliation.mjs';
 import {ref,computed,watch,onBeforeUnmount} from 'vue';
 import {request,imageBlob} from './api';
 import {validateAttachments} from './image.mjs';
