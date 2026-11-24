@@ -1729,8 +1729,17 @@ input[type="range"] {
   height: 16px;
   flex: 0 0 auto;
 }
-.account-buttons .account-mode {
+.account-controls--sidebar .account-mode {
   flex: 1 0 100%;
+}
+.account-controls--topbar .account-mode {
+  flex: 0 0 auto;
+  width: max-content;
+  min-width: 0;
+  max-width: 96px;
+  min-height: 34px;
+  padding: 6px 8px;
+  gap: 5px;
 }
 .account-buttons .account-mode[aria-pressed="true"],
 .profile-access-mode .outline-button[aria-pressed="true"] {

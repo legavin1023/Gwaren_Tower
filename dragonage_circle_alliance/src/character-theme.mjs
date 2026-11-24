@@ -15,3 +15,7 @@ export function characterTheme(character){
  const color=themeColor(character);if(!color)return {};
  return {'--character-color':color,'--character-ink-light':readableColor(color,'#c1c4c3'),'--character-ink-dark':readableColor(color,'#4d514f',true)};
 }
+
+// A missing or failed portrait is a solid color, never a generated image or monogram.
+export function portraitColor(character){return themeColor(character)||'#647d87';}
+export function portraitInk(character){const color=portraitColor(character);return contrast('#ffffff',color)>=contrast('#000000',color)?'#ffffff':'#000000';}

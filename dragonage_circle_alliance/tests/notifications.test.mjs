@@ -1,3 +1,5 @@
+import {mentionText} from '../src/mention-text.mjs';
+import {notificationEvents} from '../worker/notifications.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
@@ -25,4 +27,16 @@ test('push service worker displays notifications and navigates only inside the s
  assert.equal(navigated[1],'https://circle.test/#/home');assert.equal(navigated[2],'https://circle.test/#/home');assert.equal(opened.length,0);
  handlers.push({data:{json:()=>{throw Error('bad payload');}},waitUntil:promise=>{pending=promise;}});await pending;
  assert.equal(shown[1][0],'Gwaren Tower 새 알림');
+ handlers.push({data:{json:()=>({title:'@[Anders](local-demo-101)',body:'@\\[Anders\\]\\(765b4c5a-c03e-4dbf-892b-ccf7015ef879\\)'})},waitUntil:promise=>{pending=promise;}});await pending;
+ assert.equal(shown[2][0],'@Anders');assert.equal(shown[2][1].body,'@Anders');
+
+});
+
+test('notification previews remove mention IDs before truncation, including escaped and legacy tags',()=>{
+ const id='765b4c5a-c03e-4dbf-892b-ccf7015ef879';
+ for(const input of ['@['+'앤더스'+']('+id+')','@['+'앤더스'+'](local-demo-101)','@['+'앤더스'+']('+id.slice(0,10)])assert.equal(mentionText(input),'@앤더스');
+ assert.equal(mentionText('@\\[앤더스\\]\\('+id+'\\)'),'@앤더스');
+ assert.equal(mentionText('hello @name (note)'),'hello @name (note)');
+ const events=notificationEvents({table:'posts',row:{id:'post',owner_id:'one',category:'story',character_ids:[],title:'@\\[앤더스\\]\\('+id+'\\)',body:'text',revision:1,updated_at:'2026-11-25'},actor:{id:'one',nickname:'Owner'},members:[{id:'one',active:true},{id:'two',active:true}],characters:[]});
+ assert.ok(events.length);assert.equal(events[0].body,'@앤더스');
 });

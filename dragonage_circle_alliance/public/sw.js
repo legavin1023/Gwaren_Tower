@@ -1,9 +1,16 @@
+// Stored mention identifiers belong in links, never in plain-text previews.
+function mentionText(value) {
+ return String(value ?? '').replace(/\\([\[\]()])/g,'$1')
+  .replace(/@\[([^\]]+)\]\([^\s)]*\)/g,'@$1')
+  .replace(/@\[([^\]]+)\]\([^\s)]*$/g,'@$1');
+}
+
 /* Network-only: authenticated content and images are never cached here. */
 self.addEventListener('install',()=>self.skipWaiting());
 self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
 self.addEventListener('push',event=>{
  let payload={};try{payload=event.data?.json()||{};}catch{}
- event.waitUntil(self.registration.showNotification(String(payload.title||'Gwaren Tower 새 알림').slice(0,160),{body:String(payload.body||'새 소식이 있습니다. 로그인 후 확인하세요.').slice(0,240),tag:payload.eventId||'circle-notification',data:{url:payload.url||'#/home'}}));
+ event.waitUntil(self.registration.showNotification(mentionText(payload.title||'Gwaren Tower 새 알림').slice(0,160),{body:mentionText(payload.body||'새 소식이 있습니다. 로그인 후 확인하세요.').slice(0,240),tag:payload.eventId||'circle-notification',data:{url:payload.url||'#/home'}}));
 });
 self.addEventListener('notificationclick',event=>{
  event.notification.close();

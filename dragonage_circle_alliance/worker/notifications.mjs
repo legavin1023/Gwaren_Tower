@@ -1,3 +1,4 @@
+import {mentionText} from '../src/mention-text.mjs';
 import {publishRealtime,requestClient} from './realtime.mjs';
 import { buildPushPayload } from '@block65/webcrypto-web-push';
 import { fail } from './policy.mjs';
@@ -5,7 +6,7 @@ import { fail } from './policy.mjs';
 export const defaultPreferences = () => ({new_post:true,new_comment:true,tag:true,own_comment:true});
 export function preferences(value={}) { return Object.fromEntries(Object.keys(defaultPreferences()).map(key=>[key,value[key]===undefined?true:value[key]===true])); }
 export function mentionedCharacters(text) {return [...String(text||'').matchAll(/@\[[^\]]+\]\(([0-9a-f-]{36})\)/gi)].map(match=>match[1]);}
-const preview=text=>String(text||'').replace(/@\[([^\]]+)\]\([0-9a-f-]{36}\)/gi,'@$1').slice(0,180);
+const preview=text=>mentionText(text).slice(0,180);
 const tags=post=>[...new Set([...(post.character_ids||[]),...mentionedCharacters(post.body)])];
 
 export function notificationEvents({table,row,old,actor,members,characters,post,parent}) {

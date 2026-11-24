@@ -1,11 +1,12 @@
 <template>
  <section class="log-board" aria-label="로그 게시판">
   <div class="section-heading board-actions log-board-actions">
-   <button class="primary-button" @click="$emit('create')">＋ 글 작성</button>
+
    <div class="log-view-switch" role="group" aria-label="로그 보기 방식">
     <button type="button" class="secondary-button" :aria-pressed="view==='text'" @click="setView('text')"><span aria-hidden="true">☷</span> 글 목록</button>
     <button type="button" class="secondary-button" :aria-pressed="view==='images'" @click="setView('images')"><span aria-hidden="true">▧</span> 이미지 보기</button>
    </div>
+   <button class="primary-button" @click="$emit('create')">＋ 글 작성</button>
   </div>
   <div :class="view==='images' ? 'art-post-grid' : 'log-text-list'">
    <article v-for="post in rows" :key="post.id" :class="view==='images' ? 'card post-row art-post-card' : 'log-text-row'">

@@ -1,6 +1,6 @@
 <template>
   <div class="notification-center">
-    <button class="secondary-button" :aria-expanded="open" aria-controls="notification-panel" aria-label="알림" title="알림" @click="toggle"><span aria-hidden="true">🔔</span><span class="notification-trigger-label">알림</span> <span v-if="unread" class="notification-count">{{ unread > 99 ? '99+' : unread }}</span></button>
+    <button class="secondary-button" :aria-expanded="open" aria-controls="notification-panel" aria-label="알림" title="알림" @click="toggle"><CodexIcon name="bell"/><span class="notification-trigger-label">알림</span> <span v-if="unread" class="notification-count">{{ unread > 99 ? '99+' : unread }}</span></button>
     <section v-if="open" id="notification-panel" class="notification-panel" role="dialog" aria-label="알림 목록">
       <header class="modal-head"><h3>알림</h3><small class="notification-connection">{{ connectionLabel }}</small><button class="secondary-button" aria-label="알림 닫기" @click="open=false">×</button></header>
       <p v-if="error" class="error" role="alert">{{ error }}</p>
@@ -20,11 +20,13 @@
       <div class="toolbar"><select v-model="filter" class="form-input" aria-label="알림 종류"><option value="all">전체 알림</option><option value="related">내 태그·내 글 반응</option></select><button class="outline-button" :disabled="working || !unread" @click="markAll">모두 읽음</button></div>
       <p v-if="loading" class="muted">알림을 불러오는 중…</p>
       <p v-else-if="!filtered.length" class="muted">새로운 알림이 없습니다.</p>
-      <div class="notification-items"><button v-for="item in filtered" :key="item.id" class="notification-item" :class="{unread:!item.read_at}" @click="visit(item)"><strong>{{ item.title }}</strong><span>{{ item.body }}</span><small>{{ date(item.created_at) }}{{ item.read_at ? '' : ' · 안 읽음' }}</small></button></div>
+      <div class="notification-items"><button v-for="item in filtered" :key="item.id" class="notification-item" :class="{unread:!item.read_at}" @click="visit(item)"><strong>{{ mentionText(item.title) }}</strong><span>{{ mentionText(item.body) }}</span><small>{{ date(item.created_at) }}{{ item.read_at ? '' : ' · 안 읽음' }}</small></button></div>
     </section>
   </div>
 </template>
 <script setup>
+import {mentionText} from './mention-text.mjs';
+import CodexIcon from './CodexIcon.vue';
 import {ref,computed,onMounted,onBeforeUnmount,watch} from 'vue';
 import {useRouter} from 'vue-router';
 import {request} from './api';

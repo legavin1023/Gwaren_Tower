@@ -15,7 +15,7 @@
           :src="preview || images[imagePath]"
           alt="선택한 프로필 이미지"
         />
-        <span v-else>{{ name?.[0] || "?" }}</span>
+        <span v-else class="character-portrait-color" role="img" :aria-label="(name || '캐릭터')+'의 초상화 없음'" :style="{background:color}"></span>
       </button>
       <section class="character-saved-portraits" aria-label="저장한 이미지">
         <div class="character-portrait-history-head">
@@ -41,7 +41,7 @@
                 :src="images[image.path]"
                 alt="저장한 프로필 이미지"
               />
-              <span v-else class="character-portrait-history-fallback">?</span>
+              <span v-else class="character-portrait-history-fallback" :style="{background:color}" aria-hidden="true"></span>
               <span>선택</span>
             </button>
             <button
@@ -79,6 +79,7 @@ const props = defineProps({
   modelValue: { type: Array, default: () => [] },
   imagePath: String,
   name: String,
+  color: {type:String,default:'#647d87'},
   file: Object,
 });
 const emit = defineEmits(["update:modelValue", "update:imagePath", "select"]);

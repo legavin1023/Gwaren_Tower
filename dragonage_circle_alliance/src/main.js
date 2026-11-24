@@ -6,5 +6,6 @@ import './legacy.css';
 import './circle.css';
 import './tower.css';
 import './roleplay.css';
+import './codex.css';
 const router = createRouter({history:createWebHashHistory(),routes:[{path:'/gallery',redirect:'/board/art'},{path:'/:pathMatch(.*)*',component:Shell}],scrollBehavior:()=>({top:0})});
 createApp(App).use(router).mount('#app');

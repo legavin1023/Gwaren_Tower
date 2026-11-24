@@ -1,12 +1,164 @@
-<template><section><div ref="container" class="relationship-canvas" role="img" aria-label="승인된 캐릭터 관계도"></div><p class="muted relationship-graph-help">드래그로 이동 · 노드: 프로필 · 연결선: 두 캐릭터의 관계 페이지</p><div v-if="selected" class="card relation-description"><h3>{{selected.label}}</h3><p class="prose">{{selected.description || '등록된 설명이 없습니다.'}}</p></div></section></template>
+<template>
+  <section>
+    <div
+      ref="container"
+      class="relationship-canvas"
+      role="img"
+      aria-label="승인된 캐릭터 관계도"
+    ></div>
+    <p class="muted relationship-graph-help">
+      드래그로 이동 · 노드: 프로필 · 연결선: 두 캐릭터의 관계 페이지 · 서로
+      확인한 관계만 관계도에 표시됩니다.
+    </p>
+    <div v-if="selected" class="card relation-description">
+      <h3>{{ selected.label }}</h3>
+      <p class="prose">
+        {{ selected.description || "등록된 설명이 없습니다." }}
+      </p>
+    </div>
+  </section>
+</template>
 <script setup>
-import {ref,watch,onMounted,onBeforeUnmount} from 'vue';import {useRouter} from 'vue-router';import cytoscape from 'cytoscape';import {graphElements} from './domain.mjs';
-const props=defineProps({characters:Array,relationships:Array,faction:String,kind:String,focus:String,dark:Boolean});const router=useRouter();const container=ref();const selected=ref(null);let cy;
-function layout(){cy?.layout({name:'cose',animate:false,nodeRepulsion:()=>12000,idealEdgeLength:()=>170,padding:55}).run();}
-defineExpose({layout,fit:()=>cy?.fit(undefined,55),zoomIn:()=>cy?.zoom(cy.zoom()*1.2),zoomOut:()=>cy?.zoom(cy.zoom()/1.2)});
-function draw(){if(!cy)return;cy.elements().remove();cy.add(graphElements(props.characters,props.relationships,props.faction,props.kind));layout();highlight();}
-function highlight(){if(!cy)return;cy.elements().removeClass('faded');if(props.focus){const node=cy.getElementById(props.focus);if(node.length)cy.elements().difference(node.closedNeighborhood()).addClass('faded');}}
-function theme(){const tokens=getComputedStyle(container.value);const color=key=>tokens.getPropertyValue(key).trim();return [{selector:'node',style:{label:'data(label)',width:72,height:72,'background-color':color('--graph-node'),'border-width':3,'border-color':color('--graph-border'),color:color('--ink'),'text-valign':'bottom','text-margin-y':12,'font-family':'Batang','font-size':14,'text-background-color':color('--field'),'text-background-opacity':.9,'text-background-padding':4}},{selector:'node[image != ""]',style:{'background-image':'data(image)','background-fit':'cover'}},{selector:'node[faction = "templar"]',style:{'background-color':color('--graph-templar'),'border-color':color('--graph-templar-border')}},{selector:'node[themeColor != ""]',style:{'border-color':'data(themeColor)','border-width':5}},{selector:'edge',style:{label:'data(label)',width:2,'line-color':color('--graph-edge'),'curve-style':'bezier','text-rotation':'autorotate','text-background-color':color('--field'),'text-background-opacity':1,'text-background-padding':5,'font-size':11,color:color('--muted')}},{selector:'edge[?directed]',style:{'target-arrow-shape':'triangle','target-arrow-color':color('--graph-edge')}},{selector:'.faded',style:{opacity:.15}}];}
-onMounted(()=>{cy=cytoscape({container:container.value,minZoom:.15,maxZoom:3,style:theme()});cy.on('tap','node',e=>router.push('/characters/'+e.target.id()));cy.on('tap','edge',e=>router.push('/relationships/'+e.target.id().slice(2)));draw();});
-watch(()=>[props.characters,props.relationships,props.faction,props.kind],draw,{deep:true});watch(()=>props.focus,highlight);watch(()=>props.dark,()=>cy?.style(theme()).update(),{flush:'post'});onBeforeUnmount(()=>cy?.destroy());
+import { ref, watch, onMounted, onBeforeUnmount } from "vue";
+import { useRouter } from "vue-router";
+import cytoscape from "cytoscape";
+import { graphElements } from "./domain.mjs";
+const props = defineProps({
+  characters: Array,
+  relationships: Array,
+  faction: String,
+  kind: String,
+  focus: String,
+  dark: Boolean,
+});
+const router = useRouter();
+const container = ref();
+const selected = ref(null);
+let cy;
+function layout() {
+  cy?.layout({
+    name: "cose",
+    animate: false,
+    nodeRepulsion: () => 12000,
+    idealEdgeLength: () => 170,
+    padding: 55,
+  }).run();
+}
+defineExpose({
+  layout,
+  fit: () => cy?.fit(undefined, 55),
+  zoomIn: () => cy?.zoom(cy.zoom() * 1.2),
+  zoomOut: () => cy?.zoom(cy.zoom() / 1.2),
+});
+function draw() {
+  if (!cy) return;
+  cy.elements().remove();
+  cy.add(
+    graphElements(
+      props.characters,
+      props.relationships,
+      props.faction,
+      props.kind,
+    ),
+  );
+  layout();
+  highlight();
+}
+function highlight() {
+  if (!cy) return;
+  cy.elements().removeClass("faded");
+  if (props.focus) {
+    const node = cy.getElementById(props.focus);
+    if (node.length)
+      cy.elements().difference(node.closedNeighborhood()).addClass("faded");
+  }
+}
+function theme() {
+  const tokens = getComputedStyle(container.value);
+  const color = (key) => tokens.getPropertyValue(key).trim();
+  return [
+    {
+      selector: "node",
+      style: {
+        label: "data(label)",
+        width: 72,
+        height: 72,
+        "background-color": color("--graph-node"),
+        "border-width": 3,
+        "border-color": color("--graph-border"),
+        color: color("--ink"),
+        "text-valign": "bottom",
+        "text-margin-y": 12,
+        "font-family": "Batang",
+        "font-size": 14,
+        "text-background-color": color("--field"),
+        "text-background-opacity": 0.9,
+        "text-background-padding": 4,
+      },
+    },
+    {
+      selector: 'node[image != ""]',
+      style: { "background-image": "data(image)", "background-fit": "cover" },
+    },
+    {
+      selector: 'node[faction = "templar"]',
+      style: {
+        "background-color": color("--graph-templar"),
+        "border-color": color("--graph-templar-border"),
+      },
+    },
+    {
+      selector: 'node[themeColor != ""]',
+      style: { "border-color": "data(themeColor)", "border-width": 5 },
+    },
+    {
+      selector: "edge",
+      style: {
+        label: "data(label)",
+        width: 2,
+        "line-color": color("--graph-edge"),
+        "curve-style": "bezier",
+        "text-rotation": "autorotate",
+        "text-background-color": color("--field"),
+        "text-background-opacity": 1,
+        "text-background-padding": 5,
+        "font-size": 11,
+        color: color("--muted"),
+      },
+    },
+    {
+      selector: "edge[?directed]",
+      style: {
+        "target-arrow-shape": "triangle",
+        "target-arrow-color": color("--graph-edge"),
+      },
+    },
+    { selector: ".faded", style: { opacity: 0.15 } },
+  ];
+}
+onMounted(() => {
+  cy = cytoscape({
+    container: container.value,
+    minZoom: 0.15,
+    maxZoom: 3,
+    style: theme(),
+  });
+  cy.on("tap", "node", (e) => router.push("/characters/" + e.target.id()));
+  cy.on("tap", "edge", (e) =>
+    router.push("/relationships/" + e.target.id().slice(2)),
+  );
+  draw();
+});
+watch(
+  () => [props.characters, props.relationships, props.faction, props.kind],
+  draw,
+  { deep: true },
+);
+watch(() => props.focus, highlight);
+watch(
+  () => props.dark,
+  () => cy?.style(theme()).update(),
+  { flush: "post" },
+);
+onBeforeUnmount(() => cy?.destroy());
 </script>

@@ -33,9 +33,9 @@ test('roleplay workspace toggles panels, keeps the composer separate, restores d
  const previous=new Map(names.map(name=>[name,globalThis[name]]));for(const name of names)globalThis[name]=name==='window'?window:window[name];
  const folder=new URL('../.wrangler/component-tests/',import.meta.url);await mkdir(folder,{recursive:true});const generated=[];let app;
  const requests=[],revoked=[],revoke=URL.revokeObjectURL;URL.revokeObjectURL=url=>revoked.push(url);
- let failSend=true,viewResponse=null;
+ let failSend=true,failArchive=false,viewResponse=null;
  globalThis.__roleplayTestApi={
-  request:async(path,options)=>{if(path.startsWith('/roleplay/sync')&&viewResponse)return viewResponse;const value=options?.body instanceof Blob?null:JSON.parse(options?.body||'{}');requests.push({path,value});if(path==='/roleplay/messages'&&failSend)throw Error('연결이 끊겼습니다');return {id:'saved'};},
+  request:async(path,options)=>{if(path.startsWith('/roleplay/sync')&&viewResponse)return viewResponse;const value=options?.body instanceof Blob?null:JSON.parse(options?.body||'{}');requests.push({path,value});if(path==='/roleplay/scenes'&&value.status){if(failArchive)throw Error('Archive failed');const old=viewResponse.scenes.find(row=>row.id===value.id);const saved={...old,status:value.status,revision:old.revision+1};viewResponse.scenes=viewResponse.scenes.map(row=>row.id===saved.id?saved:row);return saved;}if(path==='/roleplay/messages'&&failSend)throw Error('연결이 끊겼습니다');return {id:'saved'};},
   imageBlob:async path=>'blob:'+path,
  };
  try{
@@ -124,6 +124,31 @@ test('roleplay workspace toggles panels, keeps the composer separate, restores d
   host.querySelector('.rp-composer-dock textarea').dispatchEvent(new window.KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true,cancelable:true}));await new Promise(resolve=>setImmediate(resolve));await nextTick();
   assert.equal(host.querySelector('.rp-composer-dock'),null);
   [...host.querySelectorAll('.rp-log button')].find(button=>button.textContent.trim()==='수정').click();await nextTick();await nextTick();assert.ok(host.querySelector('.rp-composer-dock'));assert.equal(host.querySelector('.rp-composer-dock textarea').value,'답변');
+  app.unmount();app=null;
+  // Direct archive controls persist only the status/revision and respect ownership.
+  const scene={id:'archive-scene',owner_id:'one',title:'Archive scene',description:'',location:'',status:'active',participant_ids:['a'],member_ids:[],admin_ids:[],visibility:'members',join_policy:'open',image_path:null,created_at:'2026-11-17T01:00:00Z',updated_at:'2026-11-17T01:00:00Z',revision:3};
+  viewResponse={cursor:10,scenes:[scene],messages:[],reads:[],newly_visible:[],has_more:false};
+  await router.push('/roleplay/scene/archive-scene');
+  const archiveMe=ref({id:'one',role:'member'});
+  app=createApp({render:()=>h(View,{me:archiveMe.value,characters,members:[],liveStatus:'live'})});app.use(router);app.mount(host);
+  await new Promise(resolve=>setImmediate(resolve));await nextTick();
+  assert.equal(host.querySelectorAll('.rp-archive-button').length,2);
+  assert.ok(host.querySelector('.rp-people-toggle + .rp-archive-button'));
+  host.querySelector('.rp-scene-header-actions .rp-archive-button').click();
+  await new Promise(resolve=>setImmediate(resolve));await nextTick();
+  assert.deepEqual(requests.findLast(row=>row.path==='/roleplay/scenes').value,{id:scene.id,revision:3,status:'archived'});
+  assert.equal(host.querySelector('.rp-archive-button').textContent,'보관 해제');
+  assert.equal(host.querySelector('.rp-new-message'),null);
+  host.querySelector('.rp-mobile-bar .rp-archive-button').click();
+  await new Promise(resolve=>setImmediate(resolve));await nextTick();
+  assert.equal(requests.findLast(row=>row.path==='/roleplay/scenes').value.status,'active');
+  assert.ok(host.querySelector('.rp-new-message'));
+  failArchive=true;host.querySelector('.rp-archive-button').click();
+  await new Promise(resolve=>setImmediate(resolve));await nextTick();
+  assert.match(host.querySelector('[role="alert"]').textContent,/Archive failed/);
+  assert.equal(host.querySelector('.rp-archive-button').textContent,'보관');
+  archiveMe.value={id:'other',role:'member'};await nextTick();assert.equal(host.querySelector('.rp-archive-button'),null);
+  archiveMe.value={id:'other',role:'admin'};await nextTick();assert.ok(host.querySelector('.rp-archive-button'));
   app.unmount();app=null;
   // Privacy changes purge the cached text and images before any subsequent page load.
   let feed,syncCount=0,finishImage;

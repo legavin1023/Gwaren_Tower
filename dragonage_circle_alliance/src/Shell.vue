@@ -1,10 +1,10 @@
 <template>
   <div v-if="!me" class="login-wrap">
+    <CodexHero gate />
     <section class="card login-card">
-      <span class="eyebrow">DRAGON AGE · PRIVATE CIRCLE</span>
-      <h1>Gwaren Tower</h1>
-      <p>마법사와 템플러, 그 사이의 이야기.</p>
-      <p class="muted">서로의 캐릭터와 이야기를 나누는 작은 공간입니다.</p>
+      <span class="eyebrow">SEALED RECORDS · AUTHORIZED OWNERS</span>
+      <h2>기록 열람 허가</h2>
+      <p class="muted">등록된 오너의 계정으로 마탑의 기록을 열람합니다.</p>
       <a href="/api/auth/login" class="primary-button login-link">{{
         localDevelopment ? "로컬 개발 모드로 입장" : "Google 계정으로 입장"
       }}</a>
@@ -20,24 +20,48 @@
     </section>
   </div>
   <div v-else class="app-shell" :class="{ 'dark-mode': dark }">
-    <aside class="sidebar">
+    <aside class="sidebar" :class="{ 'index-open': navigationOpen }">
       <div class="brand">
-        <span class="brand-mark">DA</span
-        ><span><b>Gwaren Tower</b><small>자캐 동맹</small></span>
+        <span><b>Gwaren Tower</b><small>THE CIRCLE · ARCHIVES</small></span>
+        <button
+          type="button"
+          class="mobile-index-toggle"
+          :aria-expanded="navigationOpen"
+          aria-controls="archive-index"
+          :aria-label="navigationOpen ? '목차 닫기' : '목차 열기'"
+          @click="navigationOpen = !navigationOpen"
+        >
+          <CodexIcon name="index" /><span>목차</span>
+        </button>
       </div>
-      <nav class="side-nav" aria-label="주요 메뉴">
+      <p class="index-caption">
+        <span>INDEX OF RECORDS</span><span>I — IX</span>
+      </p>
+      <nav id="archive-index" class="side-nav" aria-label="주요 메뉴">
         <router-link
-          v-for="item in navigation"
+          v-for="(item, index) in navigation"
           :key="item.path"
           :to="item.path"
           class="nav-item"
-          >{{ item.icon }}　{{ item.label }}</router-link
-        ><router-link v-if="admin" to="/admin" class="nav-item"
-          >⚙　운영 관리</router-link
+          @click="navigationOpen = false"
+          ><CodexIcon :name="item.icon" /><span>{{ item.label }}</span
+          ><small class="nav-index" aria-hidden="true">{{
+            ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"][index]
+          }}</small></router-link
+        >
+        <router-link
+          v-if="admin"
+          to="/admin"
+          class="nav-item"
+          @click="navigationOpen = false"
+          ><CodexIcon name="seal" /><span>운영 관리</span
+          ><small class="nav-index" aria-hidden="true">X</small></router-link
         >
       </nav>
       <AccountControls
-        class="sidebar-bottom account-controls--desktop"
+        class="sidebar-bottom account-controls--sidebar"
+        :show-mode="false"
+        :show-session="false"
         :me="viewMe"
         :can-admin="canAdmin"
         :admin-mode="administratorMode"
@@ -52,16 +76,14 @@
     <div class="content-shell">
       <header class="topbar">
         <div class="topbar-heading" :title="pageTitle">
-          <span class="breadcrumb">DRAGON AGE / Gwaren Tower</span>
+          <!-- <span class="breadcrumb">GWAREN TOWER / THE CODEX</span> -->
           <h1 class="topbar-title">{{ pageTitle }}</h1>
         </div>
-        <div class="toolbar">
+        <div class="toolbar topbar-actions">
           <NotificationCenter
             :version="notificationVersion"
             :status="liveStatus"
           />
-          <span class="badge">{{ canAdmin ? administratorMode ? roleLabel(viewMe.role) + ' 모드' : '일반 회원 모드' : '회원' }}</span
-          >
           <button
             class="secondary-button"
             :disabled="busy"
@@ -84,20 +106,21 @@
               /></svg
             ><span class="topbar-refresh-text">새로고침</span>
           </button>
+          <AccountControls
+            class="account-controls--topbar"
+            :show-mode="true"
+            :me="viewMe"
+            :can-admin="canAdmin"
+            :admin-mode="administratorMode"
+            @change-mode="switchAccessMode"
+            :representative="representative"
+            :dark="dark"
+            :busy="busy"
+            compact
+            @toggle-theme="dark = !dark"
+            @logout="act(logout)"
+          />
         </div>
-        <AccountControls
-          class="account-controls--mobile"
-          :me="viewMe"
-          :can-admin="canAdmin"
-          :admin-mode="administratorMode"
-          @change-mode="switchAccessMode"
-          :representative="representative"
-          :dark="dark"
-          :busy="busy"
-          compact
-          @toggle-theme="dark = !dark"
-          @logout="act(logout)"
-        />
       </header>
       <main :key="me.id + ':' + administratorMode" class="main-content">
         <p v-if="error" class="error alert" role="alert">
@@ -107,23 +130,12 @@
         <p v-if="message" class="success alert" role="status">{{ message }}</p>
         <p v-if="loading">기록을 불러오는 중…</p>
         <template v-if="route.path === '/' || route.path === '/home'"
-          ><section class="card welcome">
-            <span class="eyebrow">THE CIRCLE · OUR STORIES</span>
-            <h2>인연을 기록하는 곳</h2>
-            <p>마탑의 창 너머, 아직 쓰이지 않은 이야기들.</p>
-            <p class="muted">
-              캐릭터를 만나고, 느슨하게 이어지는 이야기를 남겨주세요.<br />언제든
-              합류하고, 각자의 속도로 머물러도 좋습니다.
-            </p>
-            <router-link to="/characters" class="outline-button"
-              >캐릭터 둘러보기 ↗</router-link
-            >
-          </section>
+          ><CodexHero />
           <div class="summary-grid">
             <router-link to="/characters" class="card"
               ><span class="eyebrow">CHARACTERS</span>
               <h2>{{ characters.length }}</h2>
-              <span>마탑의 사람들</span></router-link
+              <span>인명 기록부</span></router-link
             ><router-link to="/relationships" class="card"
               ><span class="eyebrow">CONNECTIONS</span>
               <h2>{{ approved.length }}</h2>
@@ -134,84 +146,75 @@
               <span>함께 쓴 이야기</span></router-link
             >
           </div>
-          <h3>최근 공지</h3>
-          <router-link
-            v-for="post in posts
-              .filter((p) => p.category === 'notice')
-              .slice(-3)
-              .reverse()"
-            :key="post.id"
-            class="card post-row"
-            :to="'/board/notice/' + post.id"
-            >{{ post.title }}
-            <span class="muted">{{ date(post.created_at) }}</span></router-link
-          >
-          <p v-if="!posts.some((p) => p.category === 'notice')" class="muted">
-            등록된 공지가 없습니다.
-          </p></template
+          <section class="codex-announcements">
+            <div class="section-heading">
+              <h3>마탑의 공지</h3>
+              <router-link to="/board/notice">전체 공지 보기 →</router-link>
+            </div>
+            <router-link
+              v-for="post in posts
+                .filter((p) => p.category === 'notice')
+                .slice(-3)
+                .reverse()"
+              :key="post.id"
+              class="card post-row"
+              :to="'/board/notice/' + post.id"
+              >{{ post.title }}
+              <span class="muted">{{
+                date(post.created_at)
+              }}</span></router-link
+            >
+            <p v-if="!posts.some((p) => p.category === 'notice')" class="muted">
+              등록된 공지가 없습니다.
+            </p>
+          </section></template
         >
         <template v-else-if="route.path === '/characters'"
-          ><div class="section-heading">
-            <div>
+          ><div
+            class="character-directory-toolbar"
+            role="group"
+            aria-label="캐릭터 목록 검색 및 필터"
+          >
+            <div class="character-directory-title">
               <span class="eyebrow">CHARACTERS</span>
               <h2>마탑의 사람들</h2>
             </div>
-            <button class="primary-button" @click="editCharacter()">
-              ＋ 캐릭터 등록
-            </button>
-          </div>
-          <div class="toolbar">
+            <div class="character-directory-actions">
             <input
               v-model="search"
-              class="form-input"
+              class="form-input character-directory-search"
               placeholder="이름 검색"
               aria-label="캐릭터 검색"
-            /><select
+            />
+            <select
               v-model="faction"
-              class="form-input"
+              class="form-input character-directory-affiliation"
               aria-label="소속"
             >
               <option value="">모든 소속</option>
-              <option v-for="option in affiliationOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-            </select>
-          </div>
-          <label class="recruitment-filter"
-            >자관 모집 상태<select
-              v-model="recruitmentFilter"
-              class="form-input"
-              aria-label="자관 모집 필터"
-            >
-              <option value="">전체 캐릭터</option>
               <option
-                v-for="option in recruitmentOptions"
+                v-for="option in affiliationOptions"
                 :key="option.value"
                 :value="option.value"
               >
                 {{ option.label }}
               </option>
-            </select></label
-          >
+            </select>
+            <button
+              class="primary-button character-directory-create"
+              @click="editCharacter()"
+            >
+              ＋ 캐릭터 등록
+            </button>
+            </div>
+          </div>
           <div class="characters-grid">
-            <router-link
+            <CharacterCard
               v-for="c in filteredCharacters"
               :key="c.id"
-              :to="'/characters/' + c.id"
-              class="card character-card character-themed"
-              :style="characterTheme(c)"
-              ><Portrait :character="c" />
-              <div>
-                <span class="faction-badge" :class="c.faction">{{
-                  affiliationLabel(c)
-                }}</span>
-                <h3 class="character-name">{{ c.name }}</h3>
-                <RecruitmentStatus :character="c" />
-                <p class="muted">
-                  {{ c.position || "마탑의 일원" }}
-                </p>
-                <small class="muted">오너 · {{ owner(c.owner_id) }}</small>
-              </div>
-              <span class="card-arrow">↗</span></router-link
-            >
+              :character="c"
+              :owner="owner(c.owner_id)"
+            />
           </div>
           <p v-if="!filteredCharacters.length" class="empty-state">
             아직 등록된 캐릭터가 없습니다.
@@ -249,12 +252,37 @@
               </button>
               <Portrait v-else :character="character" />
               <div class="profile-hero-info">
-                <h2 class="character-name" :title="character.name">{{ character.name }}</h2>
-                <span class="faction-badge" :class="character.faction">{{ affiliationLabel(character) }}</span>
-                <p v-if="character.position" :title="character.position">{{ character.position }}</p>
-                <small class="muted" :title="'오너 · '+owner(character.owner_id)">오너 · {{ owner(character.owner_id) }}</small>
-                <RecruitmentStatus :character="character" :title="character.extra?.recruitment_note" details />
-                <button v-if="admin" class="secondary-button profile-delete-button" @click="deleteTarget = { table: 'characters', id: character.id }">삭제</button>
+                <p class="dossier-reference">
+                  PERSONAL FILE · {{ character.id.slice(0, 8).toUpperCase() }}
+                </p>
+                <h2 class="character-name" :title="character.name">
+                  {{ character.name }}
+                </h2>
+                <span class="faction-badge" :class="character.faction">{{
+                  affiliationLabel(character)
+                }}</span>
+                <p v-if="character.position" :title="character.position">
+                  {{ character.position }}
+                </p>
+                <small
+                  class="muted"
+                  :title="'오너 · ' + owner(character.owner_id)"
+                  >오너 · {{ owner(character.owner_id) }}</small
+                >
+                <RecruitmentStatus
+                  :character="character"
+                  :title="character.extra?.recruitment_note"
+                  details
+                />
+                <button
+                  v-if="admin"
+                  class="secondary-button profile-delete-button"
+                  @click="
+                    deleteTarget = { table: 'characters', id: character.id }
+                  "
+                >
+                  삭제
+                </button>
               </div>
               <CharacterMiniGallery
                 v-if="characterGallery(character.id).length"
@@ -264,50 +292,75 @@
             <div class="profile-columns">
               <section class="card">
                 <nav class="rp-tabs" aria-label="캐릭터 프로필 메뉴">
-                  <button class="outline-button" :aria-pressed="profileTab === 'profile'" @click="profileTab = 'profile'">캐릭터 프로필</button>
-                  <button class="outline-button" :aria-pressed="profileTab === 'roleplay'" @click="profileTab = 'roleplay'">역극 기록</button>
+                  <button
+                    class="outline-button"
+                    :aria-pressed="profileTab === 'profile'"
+                    @click="profileTab = 'profile'"
+                  >
+                    캐릭터 프로필
+                  </button>
+                  <button
+                    class="outline-button"
+                    :aria-pressed="profileTab === 'roleplay'"
+                    @click="profileTab = 'roleplay'"
+                  >
+                    역극 기록
+                  </button>
                 </nav>
                 <template v-if="profileTab === 'profile'">
-                <div class="character-profile-summary">
-                <div v-for="f in profileFields" :key="f.key"
-                  class="character-profile-summary-field"
-                  :style="{ '--profile-field-span': f.span || 12 }"
-                  :class="{ 'character-profile-field-wide': f.long || f.key === 'quote', 'character-profile-faction': f.key === 'circle_faction' }"
-                >
-                  <h4>{{ f.label }}</h4>
-                  <p class="prose">
-                    {{
-                      fieldDisplayValue(character, f) ||
-                      "아직 기록되지 않았습니다."
-                    }}
-                  </p>
-                </div>
-                </div>
-                <template v-for="(value, key) in character.extra" :key="key">
-                  <template
-                    v-if="
-                      ![
-                        'theme_color',
-                        'portrait_history',
-                        'recruitment_status',
-                        'recruitment_note',
-                      ].includes(key) && !extraFields.some((f) => f.key === key)
-                    "
-                    ><h4>{{ key }}</h4>
-                    <p class="prose">{{ value }}</p></template
-                  >
+                  <div class="character-profile-summary">
+                    <div
+                      v-for="f in profileFields"
+                      :key="f.key"
+                      class="character-profile-summary-field"
+                      :style="{ '--profile-field-span': f.span || 12 }"
+                      :class="{
+                        'character-profile-field-wide':
+                          f.long || f.key === 'quote',
+                        'character-profile-faction': f.key === 'circle_faction',
+                      }"
+                    >
+                      <h4>{{ f.label }}</h4>
+                      <p class="prose">
+                        {{
+                          fieldDisplayValue(character, f) ||
+                          "아직 기록되지 않았습니다."
+                        }}
+                      </p>
+                    </div>
+                  </div>
+                  <template v-for="(value, key) in character.extra" :key="key">
+                    <template
+                      v-if="
+                        ![
+                          'theme_color',
+                          'portrait_history',
+                          'recruitment_status',
+                          'recruitment_note',
+                        ].includes(key) &&
+                        !extraFields.some((f) => f.key === key)
+                      "
+                      ><h4>{{ key }}</h4>
+                      <p class="prose">{{ value }}</p></template
+                    >
+                  </template>
+                  <h3>오너란</h3>
+                  <template v-for="f in ownerFields" :key="f.key">
+                    <h4>{{ f.label }}</h4>
+                    <p class="prose">
+                      {{
+                        fieldValue(character, f) || "아직 기록되지 않았습니다."
+                      }}
+                    </p>
+                  </template>
                 </template>
-                <h3>오너란</h3>
-                <template v-for="f in ownerFields" :key="f.key">
-                  <h4>{{ f.label }}</h4>
-                  <p class="prose">
-                    {{
-                      fieldValue(character, f) || "아직 기록되지 않았습니다."
-                    }}
-                  </p>
-                </template>
-                </template>
-                <RoleplayRecords v-else :key="character.id" :character-ids="[character.id]" :characters="characters" :version="roleplayVersion" />
+                <RoleplayRecords
+                  v-else
+                  :key="character.id"
+                  :character-ids="[character.id]"
+                  :characters="characters"
+                  :version="roleplayVersion"
+                />
               </section>
               <section class="card">
                 <div class="affection-profile-heading">
@@ -472,7 +525,14 @@
             삭제되었거나 존재하지 않는 캐릭터입니다.
           </p></template
         >
-        <RoleplayView v-else-if="route.path.startsWith('/roleplay')" :me="viewMe" :characters="characters" :members="members" :version="roleplayVersion" :live-status="liveStatus" />
+        <RoleplayView
+          v-else-if="route.path.startsWith('/roleplay')"
+          :me="viewMe"
+          :characters="characters"
+          :members="members"
+          :version="roleplayVersion"
+          :live-status="liveStatus"
+        />
         <template v-else-if="route.path === '/affection'">
           <AffectionList
             :characters="characters"
@@ -493,26 +553,9 @@
           @create="createPairPost"
         />
         <template v-else-if="route.path === '/relationships'"
-          ><div class="section-heading">
-            <div>
-              <span class="eyebrow">THREADS OF FATE</span>
-              <h2>인연의 실</h2>
-              <p class="muted">서로 확인한 관계만 관계도에 표시됩니다.</p>
-            </div>
-            <button
-              v-if="mine.length"
-              class="primary-button"
-              @click="editRelation()"
-            >
-              ＋ 관계 제안
-            </button>
-          </div>
+          >
           <div class="toolbar relationship-controls">
-            <select
-              v-model="focus"
-              class="form-input"
-              aria-label="중심 캐릭터"
-            >
+            <select v-model="focus" class="form-input" aria-label="중심 캐릭터">
               <option value="">전체 캐릭터</option>
               <option v-for="c in characters" :value="c.id" :key="c.id">
                 {{ c.name }}
@@ -521,11 +564,50 @@
               {{ graph ? "목록 보기" : "관계도 보기" }}
             </button>
             <template v-if="graph">
-              <button class="secondary-button" aria-label="전체 보기" title="전체 보기" @click="relationshipGraph?.fit()"><span class="relationship-action-icon" aria-hidden="true">⛶</span><span class="relationship-action-label">전체 보기</span></button>
-              <button class="secondary-button" aria-label="자동 배치" title="자동 배치" @click="relationshipGraph?.layout()"><span class="relationship-action-icon" aria-hidden="true">⇄</span><span class="relationship-action-label">자동 배치</span></button>
-              <button class="secondary-button relationship-zoom" aria-label="확대" title="확대" @click="relationshipGraph?.zoomIn()">＋</button>
-              <button class="secondary-button relationship-zoom" aria-label="축소" title="축소" @click="relationshipGraph?.zoomOut()">−</button>
+              <button
+                class="secondary-button"
+                aria-label="전체 보기"
+                title="전체 보기"
+                @click="relationshipGraph?.fit()"
+              >
+                <span class="relationship-action-icon" aria-hidden="true"
+                  >⛶</span
+                ><span class="relationship-action-label">전체 보기</span>
+              </button>
+              <button
+                class="secondary-button"
+                aria-label="자동 배치"
+                title="자동 배치"
+                @click="relationshipGraph?.layout()"
+              >
+                <span class="relationship-action-icon" aria-hidden="true"
+                  >⇄</span
+                ><span class="relationship-action-label">자동 배치</span>
+              </button>
+              <button
+                class="secondary-button relationship-zoom"
+                aria-label="확대"
+                title="확대"
+                @click="relationshipGraph?.zoomIn()"
+              >
+                ＋
+              </button>
+              <button
+                class="secondary-button relationship-zoom"
+                aria-label="축소"
+                title="축소"
+                @click="relationshipGraph?.zoomOut()"
+              >
+                −
+              </button>
             </template>
+            <button
+              v-if="mine.length"
+              class="primary-button relationship-propose"
+              @click="editRelation()"
+            >
+              ＋ 관계 제안
+            </button>
           </div>
           <RelationshipGraph
             v-if="graph"
@@ -767,10 +849,31 @@
                 <span>로그인 계정</span><span>{{ me.email }}</span>
               </p>
             </header>
-            <div v-if="canAdmin" class="profile-access-mode" role="group" aria-label="이용 모드 선택">
+            <div
+              v-if="canAdmin"
+              class="profile-access-mode"
+              role="group"
+              aria-label="이용 모드 선택"
+            >
               <span>이용 모드</span>
-              <button type="button" class="outline-button" :aria-pressed="!administratorMode" :disabled="busy" @click="switchAccessMode(false)">일반 회원 모드</button>
-              <button type="button" class="outline-button" :aria-pressed="administratorMode" :disabled="busy" @click="switchAccessMode(true)">관리자 모드</button>
+              <button
+                type="button"
+                class="outline-button"
+                :aria-pressed="!administratorMode"
+                :disabled="busy"
+                @click="switchAccessMode(false)"
+              >
+                일반 회원 모드
+              </button>
+              <button
+                type="button"
+                class="outline-button"
+                :aria-pressed="administratorMode"
+                :disabled="busy"
+                @click="switchAccessMode(true)"
+              >
+                관리자 모드
+              </button>
             </div>
             <form
               class="profile-settings-form"
@@ -1037,6 +1140,7 @@
               v-model="draft.extra.portrait_history"
               v-model:image-path="draft.image_path"
               :name="draft.name"
+              :color="portraitColor(draft)"
               :file="file"
               @select="file = $event"
             >
@@ -1069,7 +1173,9 @@
                   @change="setField(f, $event.target.value)"
                   class="form-input"
                 >
-                  <option value="" :disabled="f.key === 'affiliation_type'">선택</option>
+                  <option value="" :disabled="f.key === 'affiliation_type'">
+                    선택
+                  </option>
                   <option
                     v-for="option in f.options"
                     :key="option"
@@ -1381,10 +1487,21 @@ import {
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { request, save, remove, upload, imageBlob, exportAll } from "./api";
-import {accountRole,canUseAdminMode,readAdminMode,rememberAdminMode,setRequestMode,getRequestMode,memberForMode} from './access-mode.mjs';
+import {
+  accountRole,
+  canUseAdminMode,
+  readAdminMode,
+  rememberAdminMode,
+  setRequestMode,
+  getRequestMode,
+  memberForMode,
+} from "./access-mode.mjs";
 import { createLiveUpdates } from "./live-updates.mjs";
 import { createImageCache } from "./image-cache.mjs";
 import Portrait from "./Portrait.vue";
+import CodexHero from "./CodexHero.vue";
+import CodexIcon from "./CodexIcon.vue";
+import CharacterCard from "./CharacterCard.vue";
 import CharacterThemePicker from "./CharacterThemePicker.vue";
 import CharacterMiniGallery from "./CharacterMiniGallery.vue";
 import CharacterPortraitEditor from "./CharacterPortraitEditor.vue";
@@ -1392,11 +1509,17 @@ import RecruitmentStatus from "./RecruitmentStatus.vue";
 import RecruitmentEditor from "./RecruitmentEditor.vue";
 import CharacterQuestions from "./CharacterQuestions.vue";
 import RelationshipArchive from "./RelationshipArchive.vue";
-const RoleplayView = defineAsyncComponent(() => import('./RoleplayView.vue'));
-const RoleplayRecords = defineAsyncComponent(() => import('./RoleplayRecords.vue'));
-import { affiliationOptions, affiliationType, affiliationLabel } from "./affiliation.mjs";
+const RoleplayView = defineAsyncComponent(() => import("./RoleplayView.vue"));
+const RoleplayRecords = defineAsyncComponent(() =>
+  import("./RoleplayRecords.vue"),
+);
+import {
+  affiliationOptions,
+  affiliationType,
+  affiliationLabel,
+} from "./affiliation.mjs";
 import { recruitmentOptions } from "./recruitment.mjs";
-import { characterTheme } from "./character-theme.mjs";
+import { characterTheme, portraitColor } from "./character-theme.mjs";
 import AccountControls from "./AccountControls.vue";
 import ImageSlider from "./ImageSlider.vue";
 import LogBoard from "./LogBoard.vue";
@@ -1409,6 +1532,7 @@ const RelationshipGraph = defineAsyncComponent(() =>
   import("./RelationshipGraph.vue"),
 );
 import CommentsPanel from "./CommentsPanel.vue";
+const navigationOpen = ref(false);
 const route = useRoute(),
   router = useRouter();
 const me = ref(null),
@@ -1423,7 +1547,7 @@ const me = ref(null),
   history = ref([]);
 const notificationVersion = ref(0),
   roleplayVersion = ref(0),
-  profileTab = ref('profile'),
+  profileTab = ref("profile"),
   liveStatus = ref("connecting");
 const busy = ref(false),
   loading = ref(true),
@@ -1463,15 +1587,15 @@ const imageCache = createImageCache(imageBlob);
 const localDevelopment = process.env.NODE_ENV === "development";
 const authError = new URLSearchParams(location.search).get("auth_error");
 const navigation = [
-  { path: "/home", icon: "⌂", label: "메인" },
-  { path: "/characters", icon: "♙", label: "캐릭터" },
-  { path: "/relationships", icon: "◇", label: "관계도" },
-  { path: "/affection", icon: "♥", label: "호감도" },
-  { path: "/roleplay", icon: "✎", label: "역극" },
-  { path: "/board/story", icon: "▤", label: "썰 게시판" },
-  { path: "/board/art", icon: "▧", label: "로그" },
-  { path: "/board/notice", icon: "▣", label: "공지" },
-  { path: "/profile", icon: "○", label: "내 프로필" },
+  { path: "/home", icon: "tower", label: "메인" },
+  { path: "/characters", icon: "people", label: "캐릭터" },
+  { path: "/relationships", icon: "relation", label: "관계도" },
+  { path: "/affection", icon: "affection", label: "호감도" },
+  { path: "/roleplay", icon: "quill", label: "역극" },
+  { path: "/board/story", icon: "book", label: "썰 게시판" },
+  { path: "/board/art", icon: "image", label: "로그" },
+  { path: "/board/notice", icon: "edict", label: "공지" },
+  { path: "/profile", icon: "profile", label: "내 프로필" },
 ];
 const races = ["인간", "엘프", "드워프", "쿠나리"];
 const extraFields = [
@@ -1498,11 +1622,17 @@ const profileFields = [
     label: "소속",
     extra: true,
     span: 3,
-    options: affiliationOptions.map(option => option.value),
-    optionLabels: Object.fromEntries(affiliationOptions.map(option => [option.value, option.label])),
+    options: affiliationOptions.map((option) => option.value),
+    optionLabels: Object.fromEntries(
+      affiliationOptions.map((option) => [option.value, option.label]),
+    ),
   },
   { key: "position", label: "직책", span: 3 },
-  { ...extraFields.find((f) => f.key === "circle_faction"), extra: true, span: 3 },
+  {
+    ...extraFields.find((f) => f.key === "circle_faction"),
+    extra: true,
+    span: 3,
+  },
   { key: "quote", label: "한 마디", extra: true },
   {
     ...extraFields.find((f) => f.key === "appearance"),
@@ -1547,7 +1677,9 @@ const representative = computed(() =>
   byId(me.value?.representative_character_id),
 );
 const canAdmin = computed(() => canUseAdminMode(me.value));
-const superAdmin = computed(() => administratorMode.value && accountRole(me.value) === "superadmin");
+const superAdmin = computed(
+  () => administratorMode.value && accountRole(me.value) === "superadmin",
+);
 const viewMe = computed(() => memberForMode(me.value, administratorMode.value));
 const admin = computed(() => canAdmin.value && administratorMode.value),
   mine = computed(() =>
@@ -1585,8 +1717,7 @@ const admin = computed(() => canAdmin.value && administratorMode.value),
   ),
   filteredRelations = computed(() =>
     approved.value.filter(
-      (r) =>
-        !focus.value || [r.source_id, r.target_id].includes(focus.value),
+      (r) => !focus.value || [r.source_id, r.target_id].includes(focus.value),
     ),
   ),
   pageTitle = computed(
@@ -1665,25 +1796,26 @@ async function act(fn) {
   }
 }
 async function switchAccessMode(enabled) {
-  if (!canAdmin.value || busy.value || administratorMode.value === enabled) return;
+  if (!canAdmin.value || busy.value || administratorMode.value === enabled)
+    return;
   await act(async () => {
     administratorMode.value = enabled;
-    setRequestMode(enabled ? 'admin' : 'member');
+    setRequestMode(enabled ? "admin" : "member");
     rememberAdminMode(me.value, enabled);
-    modal.value = '';
+    modal.value = "";
     deleteTarget.value = null;
     members.value = [];
     history.value = [];
     clearUrls();
-    me.value = await request('/me');
-    if (!enabled && route.path === '/admin') await router.replace('/home');
+    me.value = await request("/me");
+    if (!enabled && route.path === "/admin") await router.replace("/home");
     await refresh();
   });
 }
-watch(canAdmin, allowed => {
+watch(canAdmin, (allowed) => {
   if (!allowed) {
     administratorMode.value = false;
-    setRequestMode('member');
+    setRequestMode("member");
   }
 });
 function clearUrls() {
@@ -1710,7 +1842,10 @@ async function refreshOnce() {
   const memberId = me.value?.id;
   const mode = getRequestMode();
   const data = await request("/data");
-  if (mode !== getRequestMode()) { refreshAgain = true; return; }
+  if (mode !== getRequestMode()) {
+    refreshAgain = true;
+    return;
+  }
   if (pageClosed || !memberId || me.value?.id !== memberId) return;
   const paths = [
     ...new Set(
@@ -1721,7 +1856,10 @@ async function refreshOnce() {
     ),
   ];
   const images = await imageCache.resolve(paths);
-  if (mode !== getRequestMode()) { refreshAgain = true; return; }
+  if (mode !== getRequestMode()) {
+    refreshAgain = true;
+    return;
+  }
   if (pageClosed || me.value?.id !== memberId) return;
   urls.forEach((url) => URL.revokeObjectURL(url));
   urls = [];
@@ -1732,7 +1870,12 @@ async function refreshOnce() {
   media.value = data.media.map((m) => ({ ...m, image: images[m.path] || "" }));
   members.value = data.members;
   const currentMember = data.members.find((member) => member.id === memberId);
-  if (currentMember) me.value = { ...me.value, ...currentMember, account_role: currentMember.role };
+  if (currentMember)
+    me.value = {
+      ...me.value,
+      ...currentMember,
+      account_role: currentMember.role,
+    };
   relationships.value = data.relationships;
   affection.value = data.affection;
   posts.value = data.posts;
@@ -1830,22 +1973,33 @@ const postImageSlots = computed(() =>
   ),
 );
 function characterGallery(characterId) {
-  return characterId ? media.value.filter(image => image.character_id === characterId && !image.post_id) : [];
+  return characterId
+    ? media.value.filter(
+        (image) => image.character_id === characterId && !image.post_id,
+      )
+    : [];
 }
 const draftGalleryImages = computed(() => [
-  ...characterGallery(draft.value.id).filter(image => !removedGalleryImages.value.includes(image.id)),
+  ...characterGallery(draft.value.id).filter(
+    (image) => !removedGalleryImages.value.includes(image.id),
+  ),
   ...galleryFiles.value,
 ]);
 function clearGalleryPreviews() {
-  galleryFiles.value.forEach(image => URL.revokeObjectURL(image.image));
+  galleryFiles.value.forEach((image) => URL.revokeObjectURL(image.image));
   galleryFiles.value = [];
 }
 function selectGalleryImages(files) {
   try {
     validateAttachments(files, draftGalleryImages.value.length);
-    galleryFiles.value.push(...files.map(file => ({
-      id: crypto.randomUUID(), file, caption: file.name, image: URL.createObjectURL(file),
-    })));
+    galleryFiles.value.push(
+      ...files.map((file) => ({
+        id: crypto.randomUUID(),
+        file,
+        caption: file.name,
+        image: URL.createObjectURL(file),
+      })),
+    );
     error.value = "";
   } catch (e) {
     error.value = e.message;
@@ -1854,7 +2008,9 @@ function selectGalleryImages(files) {
 function removeGalleryImage(image) {
   if (image.file) {
     URL.revokeObjectURL(image.image);
-    galleryFiles.value = galleryFiles.value.filter(item => item.id !== image.id);
+    galleryFiles.value = galleryFiles.value.filter(
+      (item) => item.id !== image.id,
+    );
   } else removedGalleryImages.value.push(image.id);
 }
 function clearPostPreviews() {
@@ -1923,13 +2079,19 @@ async function submitDraft() {
     draft.value = { ...saved, extra: { ...saved.extra } };
     for (const imageId of [...removedGalleryImages.value]) {
       await remove("media", imageId);
-      media.value = media.value.filter(image => image.id !== imageId);
-      removedGalleryImages.value = removedGalleryImages.value.filter(id => id !== imageId);
+      media.value = media.value.filter((image) => image.id !== imageId);
+      removedGalleryImages.value = removedGalleryImages.value.filter(
+        (id) => id !== imageId,
+      );
     }
     while (galleryFiles.value.length) {
       const image = galleryFiles.value[0];
       image.path ||= await upload(image.file);
-      const attached = await save("media", { character_id: saved.id, path: image.path, caption: image.caption });
+      const attached = await save("media", {
+        character_id: saved.id,
+        path: image.path,
+        caption: image.caption,
+      });
       const preview = await imageBlob(attached.path).catch(() => "");
       if (preview) urls.push(preview);
       media.value.push({ ...attached, image: preview });
@@ -2121,12 +2283,12 @@ onMounted(async () => {
   try {
     const account = await request("/me");
     administratorMode.value = readAdminMode(account);
-    setRequestMode(administratorMode.value ? 'admin' : 'member');
+    setRequestMode(administratorMode.value ? "admin" : "member");
     me.value = account;
     nickname.value = me.value.nickname;
     representativeId.value = me.value.representative_character_id || null;
     await refresh();
-    if (route.path === '/admin' && !admin.value) await router.replace('/home');
+    if (route.path === "/admin" && !admin.value) await router.replace("/home");
     try {
       const destination = notificationPath(
         sessionStorage.getItem("circle-notification-destination"),
@@ -2137,7 +2299,9 @@ onMounted(async () => {
       /* Session storage can be disabled in private browsing. */
     }
     liveUpdates = createLiveUpdates({
-      onRoleplay: () => { roleplayVersion.value++; },
+      onRoleplay: () => {
+        roleplayVersion.value++;
+      },
       onData: syncLiveData,
       onNotifications: () => {
         notificationVersion.value++;

@@ -3,6 +3,7 @@
     <div class="rp-mobile-bar">
       <button class="outline-button" :aria-expanded="listOpen" aria-controls="rp-scene-list" @click="listOpen = !listOpen">☰ 역극 목록</button>
       <button v-if="detail" class="text-button" :aria-pressed="peopleOpen" @click="peopleOpen = !peopleOpen">참여 캐릭터 {{ participantCharacters.length }}</button>
+      <button v-if="canManage" type="button" class="outline-button rp-archive-button" :disabled="busy" @click="toggleArchive">{{ busy ? '저장 중…' : currentScene.status === 'archived' ? '보관 해제' : '보관' }}</button>
     </div>
     <div class="rp-workspace" :class="{'rp-workspace--people':detail && peopleOpen,'rp-workspace--list-open':listOpen}">
     <aside id="rp-scene-list" class="rp-list-panel" aria-label="역극 목록">
@@ -80,7 +81,7 @@
 
     <template v-else-if="currentScene || currentThread">
       <header v-if="currentScene" class="card rp-scene-header">
-        <div class="rp-scene-heading"><div><span class="rp-eyebrow">ROLEPLAY · {{ currentScene.location || '자유 장면' }}</span><h2>{{ currentScene.title }}</h2><p class="muted">참여 캐릭터 {{ participantCharacters.length }}명 · {{ statuses[currentScene.status] }}</p></div><button class="outline-button rp-people-toggle" :aria-pressed="peopleOpen" @click="peopleOpen = !peopleOpen">참여 캐릭터</button></div>
+        <div class="rp-scene-heading"><div><span class="rp-eyebrow">ROLEPLAY · {{ currentScene.location || '자유 장면' }}</span><h2>{{ currentScene.title }}</h2><p class="muted">참여 캐릭터 {{ participantCharacters.length }}명 · {{ statuses[currentScene.status] }}</p></div><div class="rp-scene-header-actions"><button class="outline-button rp-people-toggle" :aria-pressed="peopleOpen" @click="peopleOpen = !peopleOpen">참여 캐릭터</button><button v-if="canManage" type="button" class="outline-button rp-archive-button" :disabled="busy" @click="toggleArchive">{{ busy ? '저장 중…' : currentScene.status === 'archived' ? '보관 해제' : '보관' }}</button></div></div>
         <img v-if="images[currentScene.image_path]" :src="images[currentScene.image_path]" alt="장면 대표 이미지" class="rp-scene-cover" />
         <p class="prose">{{ currentScene.description }}</p>
         <details class="rp-scene-options"><summary>장면 정보 · 참여 · 설정</summary>
@@ -211,6 +212,16 @@ async function saveScene(){await act(async()=>{
  if(coverFile.value){const path=await uploadRoleplay(coverFile.value,saved.id);saved=await request('/roleplay/scenes',{method:'POST',body:JSON.stringify({...saved,image_path:path})});coverFile.value=null;}
  sceneDraft.value=null;await router.push('/roleplay/scene/'+saved.id);
 });}
+async function toggleArchive(){
+ if(!canManage.value || busy.value)return;
+ const scene=currentScene.value,status=scene.status==='archived'?'active':'archived';
+ await act(async()=>{
+  const saved=await request('/roleplay/scenes',{method:'POST',body:JSON.stringify({id:scene.id,revision:scene.revision,status})});
+  if(sceneDraft.value?.id===scene.id)sceneDraft.value={...sceneDraft.value,status,revision:saved.revision};
+  cancelEditor();
+  notice.value=status==='archived'?'역극 보관소에 보관했습니다.':'보관을 해제했습니다. 이어서 작성할 수 있습니다.';
+ });
+}
 async function join(){await act(()=>request('/roleplay/scenes/'+currentScene.value.id+'/join',{method:'POST',body:JSON.stringify({id:currentScene.value.id,revision:currentScene.value.revision,character_id:joinCharacter.value||null})}));}
 async function invite(){if(!inviteCharacter.value)return;await act(()=>request('/roleplay/scenes/'+currentScene.value.id+'/invite',{method:'POST',body:JSON.stringify({id:currentScene.value.id,revision:currentScene.value.revision,participant_ids:[inviteCharacter.value]})}));inviteCharacter.value='';}
 function askDelete(type,row){deleteTarget.value={type,row};}
