@@ -465,6 +465,15 @@ test('local development login is loopback-only, separate from production, and us
   assert.equal((await devWorker.fetch(new Request('http://localhost:8090/api/auth/login',{headers:{Origin:'https://evil.test'}}),env)).status,403);
   assert.equal((await devWorker.fetch(new Request('http://localhost:8090/api/auth/login',{headers:{'Sec-Fetch-Site':'cross-site'}}),env)).status,403);
   assert.equal((await devWorker.fetch(new Request('http://localhost:8090/api/auth/login'),{...env,LOCAL_DEVELOPMENT:undefined})).status,403);
+  for(const frontend of ['http://localhost:8090','http://127.0.0.1:8090','http://[::1]:8090']){
+   const entry=await devWorker.fetch(new Request(frontend+'/api/auth/login',{headers:{Origin:frontend}}),env);
+   assert.equal(entry.status,302);assert.equal(entry.headers.get('Location'),frontend+'/#/home');
+   const localCookie=entry.headers.get('Set-Cookie').split(';')[0];
+   const exit=await devWorker.fetch(new Request(frontend+'/api/auth/logout',{method:'POST',headers:{Origin:frontend,Cookie:localCookie}}),env);
+   assert.equal(exit.status,200);
+   assert.equal((await devWorker.fetch(new Request(frontend+'/api/me',{headers:{Cookie:localCookie}}),env)).status,401);
+  }
+  for(const foreign of ['http://localhost:8091','http://127.0.0.1.evil.test:8090','http://192.168.1.2:8090'])assert.equal((await devWorker.fetch(new Request('http://localhost:8090/api/auth/login',{headers:{Origin:foreign}}),env)).status,403);
   assert.equal((await call(env,'/auth/login',null)).status,503);
   env.PUSH_VAPID_PUBLIC_KEY='should-not-be-used';env.PUSH_VAPID_PRIVATE_KEY='should-not-be-used';
   const push=await devWorker.fetch(new Request('http://localhost:8090/api/push/config',{headers:{Cookie:cookie}}),env);assert.equal((await push.json()).configured,false);

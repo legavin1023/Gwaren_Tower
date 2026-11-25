@@ -457,6 +457,7 @@ textarea::placeholder {
   letter-spacing: 0.06em;
 }
 .codex-rule {
+  text-align: center;
   height: 15px;
   position: relative;
   width: min(240px, 70%);
@@ -1906,35 +1907,43 @@ textarea::-webkit-scrollbar {
 }
 .main-content > .codex-hero .codex-hero-copy {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
+  justify-items: center;
   column-gap: 24px;
   row-gap: 5px;
   box-sizing: border-box;
   width: 100%;
-  padding: 24px 30px;
+  padding: 16px 24px;
 }
-.main-content > .codex-hero .codex-rule { display: none; }
+.main-content > .codex-hero .codex-rule {
+  display: none;
+}
 .main-content > .codex-hero h2 {
   grid-column: 1;
   margin: 0;
   font-size: clamp(30px, 3vw, 40px);
 }
-.main-content > .codex-hero h2 br { display: none; }
+.main-content > .codex-hero h2 br {
+  display: none;
+}
 .main-content > .codex-hero .codex-hero-subtitle {
   grid-column: 1;
   font-size: 14px;
 }
 .main-content > .codex-hero .codex-hero-links {
-  grid-column: 2;
-  grid-row: 1 / span 2;
+  grid-column: 1;
+  grid-row: auto;
+  justify-content: center;
   gap: 8px;
 }
 .main-content > .codex-hero .codex-hero-number {
   bottom: 12px;
   right: 16px;
 }
-.codex-announcements { margin-top: 14px; }
+.codex-announcements {
+  margin-top: 14px;
+}
 .codex-announcements .section-heading {
   margin-block: 0 8px;
   padding-block: 0 5px;
@@ -1944,10 +1953,17 @@ textarea::-webkit-scrollbar {
   margin: 0;
   line-height: 1.4;
 }
-.summary-grid .card { padding: 12px 16px; }
-.summary-grid h2 { font-size: 26px; margin-block: 3px; }
+.summary-grid .card {
+  padding: 12px 16px;
+}
+.summary-grid h2 {
+  font-size: 26px;
+  margin-block: 3px;
+}
 @media (max-width: 768px) {
-  .main-content > .codex-hero { min-height: 0; }
+  .main-content > .codex-hero {
+    min-height: 0;
+  }
   .main-content > .codex-hero .codex-hero-copy {
     grid-template-columns: minmax(0, 1fr);
     padding: 22px;
@@ -1958,7 +1974,9 @@ textarea::-webkit-scrollbar {
     grid-row: auto;
     margin-top: 8px;
   }
-  .main-content > .codex-hero .codex-hero-number { display: none; }
+  .main-content > .codex-hero .codex-hero-number {
+    display: none;
+  }
 }
 
 .rp-scene-header-actions {
@@ -1967,11 +1985,21 @@ textarea::-webkit-scrollbar {
   flex: 0 0 auto;
   gap: 6px;
 }
-.rp-archive-button { font-size: 11px; white-space: nowrap; }
+.rp-archive-button {
+  font-size: 11px;
+  white-space: nowrap;
+}
 @media (max-width: 700px) {
-  .rp-scene-header-actions { display: none; }
-  .rp-mobile-bar { flex-wrap: wrap; justify-content: flex-start; }
-  .rp-mobile-bar > .rp-archive-button { margin-inline-start: 0; }
+  .rp-scene-header-actions {
+    display: none;
+  }
+  .rp-mobile-bar {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .rp-mobile-bar > .rp-archive-button {
+    margin-inline-start: 0;
+  }
 }
 
 .app-shell .character-directory-toolbar .character-directory-search {
@@ -1996,5 +2024,25 @@ textarea::-webkit-scrollbar {
   margin-inline-start: auto;
 }
 @media (max-width: 768px) {
-  .character-directory-actions { gap: 8px; }
+  .character-directory-actions {
+    gap: 8px;
+  }
+}
+
+.codex-hero .codex-hero-copy {
+  margin-inline: auto;
+  text-align: center;
+}
+.codex-hero :is(h1, h2) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  text-align: center;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+.codex-hero .codex-rule {
+  margin-inline: auto;
 }
