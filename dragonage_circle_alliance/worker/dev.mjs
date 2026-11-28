@@ -1,3 +1,5 @@
+export {ChatRoom} from './chat.mjs';
+import {limitAuthentication} from './security.mjs';
 import {publishRealtime} from './realtime.mjs';
 export {RealtimeHub} from './realtime.mjs';
 // This entry point is used only by wrangler.dev.toml, never the production worker.
@@ -18,6 +20,7 @@ export default {async fetch(req,env,ctx){
  if(url.pathname==='/api/auth/callback')return denied(404);
  if(url.pathname==='/api/auth/login'){
   if(req.method!=='GET')return denied(405);
+  try{await limitAuthentication(req,env,'/auth/login');}catch(response){return response;}
   const stamp=new Date().toISOString();
   await env.DB.prepare("INSERT OR IGNORE INTO members(id,email,nickname,role,active,created_at,updated_at) VALUES(?,?,?,'admin',1,?,?)").bind('local-developer',email,'로컬 관리자',stamp,stamp).run();
   const member=await env.DB.prepare('SELECT id FROM members WHERE email=? AND active=1').bind(email).first();

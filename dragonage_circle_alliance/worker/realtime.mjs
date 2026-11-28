@@ -1,7 +1,10 @@
+import {notifyChat} from './chat.mjs';
 // Event-driven only: no timers, periodic D1 queries or per-connection polling.
 import {fail} from './policy.mjs';
 export function requestClient(req){const value=req.headers.get('X-Circle-Client-Id')||'';return /^[-\w]{1,80}$/.test(value)?value:'';}
 export async function publishRealtime(env,change,ctx){
+ const chat=notifyChat(env,change).catch(()=>console.error('Chat refresh failed'));
+ if(ctx?.waitUntil)ctx.waitUntil(chat);else await chat;
  if(!env.REALTIME)return;
  const delivery=(async()=>{
   const hub=env.REALTIME.get(env.REALTIME.idFromName('circle-live'));

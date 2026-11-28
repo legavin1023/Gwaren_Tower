@@ -1,0 +1,9 @@
+# Browser and API protections
+
+- Static Pages responses: `public/_headers` enforces CSP and denies framing. Scripts run only from the site; no inline scripts or eval. Vue inline styles, authenticated blob images and the existing jsDelivr font are allowed.
+- The realtime WebSocket host is explicitly `wss://gwaren-tower.pages.dev`. Update this CSP entry when changing the production domain. The same-origin Google redirect flow needs no Google script or iframe permission.
+- API responses, including errors and redirects, receive separate security headers in `worker/security.mjs`; Pages `_headers` do not apply to Functions. Existing sandbox policies on files and HTML downloads are retained. WebSocket upgrades are passed through intact.
+- Cloudflare native bindings limit each login/callback route to 20 requests per IP per minute, member writes to 60 per member per minute, and uploads to 20 per member per minute. Login and callback have independent keys; the two upload endpoints share one member quota. Logout, reads and authenticated scheduled backups do not consume these quotas. Limits are approximate per Cloudflare location, not a strict global counter or a replacement for authentication.
+- Keys hash the IP/member identifier before passing it to the limiter. No IP/member identifier is logged by this module. Missing or failing limit bindings fail closed with 503; quota exhaustion returns 429 with Retry-After: 60. Production and local namespaces are separate.
+- Deploy the Worker using the updated `worker/wrangler.toml` together with the new code, then build/deploy Pages for the browser headers. No D1 migration or new secret is required. Direct dashboard uploads must include the three rate-limit bindings.
+- Local Vue HMR does not use the production CSP. Verify the built output with the production headers rather than adding unsafe-eval for the dev server.

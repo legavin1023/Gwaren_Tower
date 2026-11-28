@@ -1,3 +1,6 @@
+import {chatRoute} from './chat.mjs';
+export {ChatRoom} from './chat.mjs';
+import {limitAuthentication,limitMemberWrite,secureApiResponse} from './security.mjs';
 import {affiliationOptions} from '../src/affiliation.mjs';
 import {questionRecord} from './questions.mjs';
 import {roleplayRoute, roleplayTables, authorizeRoleplayFile,filterRoleplayHistory,restoreRoleplayHistory} from './roleplay.mjs';
@@ -104,11 +107,11 @@ async function saveRecord(env,me,table,input,restore=false,ctx,clientId=''){
  const changes=await env.DB.batch([stmt,env.DB.prepare('INSERT INTO history(id,table_name,record_id,actor_id,action,before_json,after_json,created_at) SELECT ?,?,?,?,?,?,?,? WHERE changes()>0').bind(id(),table,row.id,me.id,restore?'restore':old?'update':'create',old?JSON.stringify(old):null,JSON.stringify(row),now()),...events.map(event=>notificationStatement(env,event,table,row))]);
  if(changes[0].meta.changes&&events.length){const delivery=sendNotifications(env,events).catch(()=>console.error('Push delivery failed'));if(ctx?.waitUntil)ctx.waitUntil(delivery);else await delivery;}
  if(!changes[0].meta.changes)fail('다른 요청과 충돌했습니다. 새로고침하세요.',409);
- await publishRealtime(env,{data:true,notificationMembers:events.map(event=>event.member_id),actorMember:me.id,actorClient:clientId},ctx);
+ await publishRealtime(env,{data:true,chatMembers:['members','characters'].includes(table),notificationMembers:events.map(event=>event.member_id),actorMember:me.id,actorClient:clientId},ctx);
  return table==='members'?memberView(env,row):row;
 }
 async function snapshot(env){
- const names=[...tables,...roleplayTables,'uploads','history','backup_runs','notifications'];const results=await env.DB.batch(names.map(t=>env.DB.prepare('SELECT * FROM '+t+' ORDER BY created_at,'+(['uploads','rp_assets'].includes(t)?'path':'id'))));return {format:'circle-cloudflare-v1',exported_at:now(),tables:Object.fromEntries(names.map((t,i)=>[t,results[i].results]))};
+ const names=[...tables,...roleplayTables,'chat_messages','uploads','history','backup_runs','notifications'];const results=await env.DB.batch(names.map(t=>env.DB.prepare('SELECT * FROM '+t+' ORDER BY created_at,'+(['uploads','rp_assets'].includes(t)?'path':'id'))));return {format:'circle-cloudflare-v1',exported_at:now(),tables:Object.fromEntries(names.map((t,i)=>[t,results[i].results]))};
 }
 async function backupAuthorized(req,env,restore=false){const expected=restore?env.RESTORE_TOKEN:env.BACKUP_TOKEN;if(!expected||!req.headers.get('Authorization')||await hash(req.headers.get('Authorization'))!==await hash('Bearer '+expected))fail('백업 인증에 실패했습니다.',403);}
 async function backupRoute(req,env,path,ctx){
@@ -120,7 +123,7 @@ async function backupRoute(req,env,path,ctx){
  }
  if(path==='/backup/restore'&&req.method==='POST'){
   await backupAuthorized(req,env,true);const b=await req.json();if(b.format!=='circle-cloudflare-v1')fail('잘못된 백업 형식');
-  const names=[...tables.filter(t=>t!=='questions'||Array.isArray(b.tables?.questions)),...roleplayTables.filter(t=>Array.isArray(b.tables?.[t])),'uploads','history',...(Array.isArray(b.tables?.backup_runs)?['backup_runs']:[]),...(Array.isArray(b.tables?.notifications)?['notifications']:[])];for(const t of names)if(!Array.isArray(b.tables?.[t]))fail('불완전한 백업: '+t);
+  const names=[...tables.filter(t=>t!=='questions'||Array.isArray(b.tables?.questions)),...roleplayTables.filter(t=>Array.isArray(b.tables?.[t])),...(Array.isArray(b.tables?.chat_messages)?['chat_messages']:[]),'uploads','history',...(Array.isArray(b.tables?.backup_runs)?['backup_runs']:[]),...(Array.isArray(b.tables?.notifications)?['notifications']:[])];for(const t of names)if(!Array.isArray(b.tables?.[t]))fail('불완전한 백업: '+t);
   for(const u of b.tables.uploads){const obj=await env.MEDIA.head(u.path);if(!obj||obj.size!==u.bytes)fail('이미지 원본을 먼저 복구하세요: '+u.path);}
   const statements=[env.DB.prepare('PRAGMA defer_foreign_keys=ON')];
   for(const t of names){const schema=await env.DB.prepare('PRAGMA table_info('+t+')').all();const allowed=new Set(schema.results.map(c=>c.name));for(const row of b.tables[t]){const keys=Object.keys(row);if(!keys.length||keys.some(k=>!allowed.has(k)))fail('잘못된 백업 필드');statements.push(env.DB.prepare(`INSERT INTO ${t} (${keys.join(',')}) VALUES (${keys.map(()=>'?').join(',')}) ON CONFLICT(${['uploads','rp_assets'].includes(t)?'path':'id'}) DO UPDATE SET ${keys.map(k=>`${k}=excluded.${k}`).join(',')}`).bind(...keys.map(k=>row[k])));}}
@@ -130,13 +133,16 @@ async function backupRoute(req,env,path,ctx){
  fail('백업 경로를 찾을 수 없습니다.',404);
 }
 async function serveFile(env,key){const obj=await env.MEDIA.get(key);if(!obj)fail('이미지를 찾을 수 없습니다.',404);return new Response(obj.body,{headers:{'Content-Type':obj.httpMetadata?.contentType||'application/octet-stream','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"}});}
-export default {async fetch(req,env,ctx){
+async function routeRequest(req,env,ctx){
  try{
   const url=new URL(req.url);const path=url.pathname.replace(/^\/api/,'');
   if(path.startsWith('/backup/'))return await backupRoute(req,env,path,ctx);
   if(!['GET','HEAD'].includes(req.method)&&req.headers.get('Origin')!==env.SITE_ORIGIN)fail('요청 출처를 확인할 수 없습니다.',403);
+  await limitAuthentication(req,env,path);
   if(path.startsWith('/auth/'))return await auth(req,env,path,ctx);
   const me=await session(req,env);
+  await limitMemberWrite(req,env,path,me);
+  if(path.startsWith('/chat/'))return await chatRoute(req,env,me,await hash(cookie(req,'circle_session')));
   if(path==='/me')return json(me);
   if(path.startsWith('/roleplay/'))return await roleplayRoute(req,env,me,ctx);
   if(path==='/live')return await openRealtime(req,env,me,await hash(cookie(req,'circle_session')));
@@ -156,7 +162,7 @@ export default {async fetch(req,env,ctx){
    const b=await req.json(),nickname=String(b.nickname||'').trim();if(!nickname||nickname.length>80)fail('닉네임은 1~80자입니다.');
    const representative=b.representative_character_id===undefined?me.representative_character_id:(b.representative_character_id||null);
    if(representative){const character=await live(env,representative);if(character.owner_id!==me.id)fail('본인의 캐릭터만 대표 캐릭터로 선택할 수 있습니다.',403);}
-   await env.DB.prepare('UPDATE members SET nickname=?,representative_character_id=?,updated_at=?,revision=revision+1 WHERE id=?').bind(nickname,representative??null,now(),me.id).run();await publishRealtime(env,{data:true,actorMember:me.id,actorClient:requestClient(req)},ctx);return json(sessionMemberView(env,await get(env,'members',me.id),req.headers.get('X-Circle-Mode')));
+   await env.DB.prepare('UPDATE members SET nickname=?,representative_character_id=?,updated_at=?,revision=revision+1 WHERE id=?').bind(nickname,representative??null,now(),me.id).run();await publishRealtime(env,{data:true,chatMembers:true,actorMember:me.id,actorClient:requestClient(req)},ctx);return json(sessionMemberView(env,await get(env,'members',me.id),req.headers.get('X-Circle-Mode')));
   }
   if(path==='/history'&&req.method==='GET'){requireSuperAdmin(me);return json(await filterRoleplayHistory(env,me,(await env.DB.prepare('SELECT * FROM history ORDER BY created_at DESC LIMIT 200').all()).results));}
   if(/^\/history\/[^/]+\/restore$/.test(path)&&req.method==='POST'){requireSuperAdmin(me);const h=await env.DB.prepare('SELECT * FROM history WHERE id=?').bind(path.split('/')[2]).first();if(!h?.before_json)fail('복구할 이전 기록이 없습니다.');if(['rp_scenes','rp_messages'].includes(h.table_name))return json(await restoreRoleplayHistory(env,me,h,ctx,requestClient(req)));const before=JSON.parse(h.before_json);delete before.revision;return json(await saveRecord(env,me,h.table_name,before,true,ctx,requestClient(req)));}
@@ -175,4 +181,5 @@ export default {async fetch(req,env,ctx){
   }
   fail('지원하지 않는 요청입니다.',405);
  }catch(error){if(error instanceof Response)return error;console.error(error?.message);return json({error:'요청을 처리하지 못했습니다. 필수 항목과 데이터 연결을 확인하세요.'},400);}
-}};
+}
+export default {async fetch(req,env,ctx){return secureApiResponse(await routeRequest(req,env,ctx));}};

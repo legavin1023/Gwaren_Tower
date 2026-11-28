@@ -21,3 +21,33 @@ class_name = "RealtimeHub"
 [[migrations]]
 tag = "v1-realtime"
 new_sqlite_classes = ["RealtimeHub"]
+
+# Approximate per-location limits; local namespaces are separate from production.
+
+[[ratelimits]]
+name = "AUTH_RATE_LIMITER"
+namespace_id = "867541001"
+simple = { limit = 20, period = 60 }
+
+[[ratelimits]]
+name = "WRITE_RATE_LIMITER"
+namespace_id = "867541002"
+simple = { limit = 60, period = 60 }
+
+[[ratelimits]]
+name = "UPLOAD_RATE_LIMITER"
+namespace_id = "867541003"
+simple = { limit = 20, period = 60 }
+
+[[durable_objects.bindings]]
+name = "CHAT"
+class_name = "ChatRoom"
+
+[[migrations]]
+tag = "v2-shared-chat"
+new_sqlite_classes = ["ChatRoom"]
+
+[[ratelimits]]
+name = "CHAT_RATE_LIMITER"
+namespace_id = "867541004"
+simple = { limit = 30, period = 60 }

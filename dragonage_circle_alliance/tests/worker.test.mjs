@@ -10,7 +10,7 @@ class D1 {
  async batch(stmts){this.db.exec('BEGIN');try{const out=stmts.map(s=>s.execute());this.db.exec('COMMIT');return out;}catch(e){this.db.exec('ROLLBACK');throw e;}}
 }
 class R2 {constructor(){this.objects=new Map();}async put(k,b,o){this.objects.set(k,{bytes:new Uint8Array(b),...o});}async get(k){const obj=this.objects.get(k);return obj?{size:obj.bytes.length,body:new Blob([obj.bytes]).stream(),httpMetadata:obj.httpMetadata,arrayBuffer:async()=>obj.bytes.buffer}:null;}async head(k){return this.get(k);}}
-async function fixture(){const env={SITE_ORIGIN:'https://circle.test',BOOTSTRAP_ADMIN_EMAIL:'root@example.test',BACKUP_TOKEN:'backup-test',RESTORE_TOKEN:'restore-test',DB:new D1((await readFile(new URL('../migrations/0001_circle.sql',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../migrations/0002_representative_character.sql',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../migrations/0003_notifications.sql',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../migrations/0004_character_questions.sql',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../migrations/0005_roleplay.sql',import.meta.url),'utf8'))),MEDIA:new R2()};for(const [id,role]of [['one','member'],['two','member'],['root','admin']]){await env.DB.prepare('INSERT INTO members(id,email,nickname,role,active,created_at,updated_at) VALUES(?,?,?,?,1,?,?)').bind(id,id+'@example.test',id,role,new Date().toISOString(),new Date().toISOString()).run();await env.DB.prepare('INSERT INTO sessions(token_hash,member_id,expires_at) VALUES(?,?,?)').bind(digest(id),id,Date.now()+86400000).run();}return env;}
+async function fixture(){const env={AUTH_RATE_LIMITER:{async limit(){return {success:true};}},WRITE_RATE_LIMITER:{async limit(){return {success:true};}},UPLOAD_RATE_LIMITER:{async limit(){return {success:true};}},SITE_ORIGIN:'https://circle.test',BOOTSTRAP_ADMIN_EMAIL:'root@example.test',BACKUP_TOKEN:'backup-test',RESTORE_TOKEN:'restore-test',DB:new D1((await readFile(new URL('../migrations/0001_circle.sql',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../migrations/0002_representative_character.sql',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../migrations/0003_notifications.sql',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../migrations/0004_character_questions.sql',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../migrations/0005_roleplay.sql',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../migrations/0006_shared_chat.sql',import.meta.url),'utf8'))),MEDIA:new R2()};for(const [id,role]of [['one','member'],['two','member'],['root','admin']]){await env.DB.prepare('INSERT INTO members(id,email,nickname,role,active,created_at,updated_at) VALUES(?,?,?,?,1,?,?)').bind(id,id+'@example.test',id,role,new Date().toISOString(),new Date().toISOString()).run();await env.DB.prepare('INSERT INTO sessions(token_hash,member_id,expires_at) VALUES(?,?,?)').bind(digest(id),id,Date.now()+86400000).run();}return env;}
 async function call(env,path,user='one',method='GET',body,headers={}){const request=new Request(env.SITE_ORIGIN+'/api'+path,{method,headers:{Origin:env.SITE_ORIGIN,...(user?{Cookie:'circle_session='+user}:{}),'Content-Type':'application/json',...headers},...(body!==undefined?{body:typeof body==='string'||body instanceof Uint8Array?body:JSON.stringify(body)}:{})});const response=await worker.fetch(request,env);let data;if(response.headers.get('Content-Type')?.includes('json'))data=await response.json();return {status:response.status,data,response};}
 test('real SQLite: invite gate, ownership, directional affection, approval, comments, media, soft delete, revision restore',async()=>{
  const env=await fixture();try{
@@ -281,11 +281,13 @@ test('snapshot + R2 restore roundtrip, read-only backup key and rollback on inva
  const bytes=new TextEncoder().encode('RIFF0000WEBPVP8 test');const file=(await call(env,'/upload','one','POST',bytes,{'Content-Type':'image/webp'})).data;
  await call(env,'/media','one','POST',{path:file.path,character_id:a.id});
  await call(env,'/backup/status',null,'POST',{status:'complete',details:'previous backup'},{Authorization:'Bearer backup-test'});
+ await env.DB.prepare('INSERT INTO chat_messages(member_id,client_message_id,body,created_at) VALUES(?,?,?,?)').bind('one','backup-chat-message','보관되는 잡담',new Date().toISOString()).run();
  const backup=(await call(env,'/backup/snapshot',null,'GET',undefined,{Authorization:'Bearer backup-test'})).data;
- assert.equal(backup.tables.backup_runs.length,1);
+ assert.equal(backup.tables.backup_runs.length,1);assert.equal(backup.tables.chat_messages[0].body,'보관되는 잡담');
  assert.equal((await call(fresh,'/backup/restore',null,'POST',backup,{Authorization:'Bearer backup-test'})).status,403);
  assert.equal((await call(fresh,'/backup/restore-file',null,'POST',bytes,{Authorization:'Bearer restore-test','Content-Type':'image/webp','X-Object-Key':file.path,'X-Sha256':digest(bytes)})).status,200);
  assert.equal((await call(fresh,'/backup/restore',null,'POST',backup,{Authorization:'Bearer restore-test'})).status,200);
+ assert.equal((await fresh.DB.prepare('SELECT body FROM chat_messages').first()).body,'보관되는 잡담');
  assert.equal((await fresh.DB.prepare('SELECT count(*) n FROM backup_runs').first()).n,1);assert.equal((await fresh.DB.prepare('SELECT secrets FROM characters WHERE id=?').bind(a.id).first()).secrets,'비밀');assert.equal((await fresh.DB.prepare('SELECT count(*) n FROM sessions').first()).n,0);
  const broken=structuredClone(backup);broken.tables.characters[0].name='변경되면 안 됨';broken.tables.media[0].owner_id='missing';assert.equal((await call(fresh,'/backup/restore',null,'POST',broken,{Authorization:'Bearer restore-test'})).status,400);assert.equal((await fresh.DB.prepare('SELECT name FROM characters WHERE id=?').bind(a.id).first()).name,'보존된 캐릭터');
  }finally{env.DB.db.close();fresh.DB.db.close();}
@@ -574,4 +576,41 @@ test('character affiliation supports four choices and preserves legacy profile s
   assert.equal((await call(env,'/characters','one','POST',{name:'Invalid',extra:{affiliation_type:'invalid'}})).status,400);
   const rows=(await call(env,'/data')).data.characters;assert.deepEqual(rows.map(row=>row.extra.affiliation_type).sort(),['chantry','mage','templar','tranquil']);
  }finally{env.DB.db.close();}
+});
+
+test('rate rejection precedes OAuth DB writes, content changes and upload reads; errors and redirects have security headers',async()=>{
+ const env=await fixture();try{
+  env.GOOGLE_CLIENT_ID='test.apps.googleusercontent.com';env.GOOGLE_CLIENT_SECRET='test-only';
+  env.AUTH_RATE_LIMITER={async limit(){return {success:false};}};
+  const login=await call(env,'/auth/login',null);
+  assert.equal(login.status,429);assert.equal(login.response.headers.get('Retry-After'),'60');
+  assert.equal((await env.DB.prepare('SELECT COUNT(*) n FROM oauth_states').first()).n,0);
+  env.WRITE_RATE_LIMITER={async limit(){return {success:false};}};
+  assert.equal((await call(env,'/posts','one','POST',{category:'story',title:'blocked'})).status,429);
+  assert.equal((await env.DB.prepare('SELECT COUNT(*) n FROM posts').first()).n,0);
+  env.UPLOAD_RATE_LIMITER={async limit(){return {success:false};}};
+  for(const path of ['/upload','/roleplay/upload'])assert.equal((await call(env,path,'one','POST',new Uint8Array(0))).status,429);
+  assert.equal(env.MEDIA.objects.size,0);
+  assert.equal((await call(env,'/data')).status,200);
+  const unauthorized=await call(env,'/data',null);assert.equal(unauthorized.status,401);assert.equal(unauthorized.response.headers.get('X-Frame-Options'),'DENY');
+  assert.equal((await call(env,'/auth/logout','one','POST')).status,200);
+ }finally{env.DB.db.close();}
+});
+test('Google authorization code and PKCE callback still create a protected member session with security headers',async()=>{
+ const env=await fixture(),originalFetch=globalThis.fetch;try{
+  env.GOOGLE_CLIENT_ID='test.apps.googleusercontent.com';env.GOOGLE_CLIENT_SECRET='test-only';
+  const login=await call(env,'/auth/login',null),location=new URL(login.response.headers.get('Location'));
+  assert.equal(login.status,302);assert.equal(location.origin,'https://accounts.google.com');assert.equal(location.searchParams.get('scope'),'openid email profile');assert.equal(location.searchParams.get('code_challenge_method'),'S256');
+  const state=location.searchParams.get('state'),oauthCookie=login.response.headers.get('Set-Cookie').split(';')[0];
+  const verifier=(await env.DB.prepare('SELECT verifier FROM oauth_states WHERE id=?').bind(state).first()).verifier;
+  globalThis.fetch=async(url,options)=>{
+   if(String(url)==='https://oauth2.googleapis.com/token'){assert.equal(options.body.get('code_verifier'),verifier);return Response.json({access_token:'test-google-token'});}
+   assert.equal(String(url),'https://openidconnect.googleapis.com/v1/userinfo');assert.equal(options.headers.Authorization,'Bearer test-google-token');return Response.json({email:'one@example.test',email_verified:true,sub:'google-one'});
+  };
+  const callback=await call(env,'/auth/callback?code=test-code&state='+state,null,'GET',undefined,{Cookie:oauthCookie});
+  assert.equal(callback.status,302);assert.equal(callback.response.headers.get('Location'),env.SITE_ORIGIN+'/#/home');
+  const cookies=callback.response.headers.get('Set-Cookie');assert.match(cookies,/circle_session=/);assert.match(cookies,/HttpOnly/);assert.match(cookies,/Secure/);assert.match(cookies,/SameSite=Lax/);assert.equal(callback.response.headers.get('X-Frame-Options'),'DENY');
+  assert.equal((await env.DB.prepare('SELECT COUNT(*) n FROM oauth_states').first()).n,0);
+  const retry=await call(env,'/auth/callback?code=test-code&state='+state,null,'GET',undefined,{Cookie:oauthCookie});assert.match(retry.response.headers.get('Location'),/auth_error=1/);
+ }finally{globalThis.fetch=originalFetch;env.DB.db.close();}
 });

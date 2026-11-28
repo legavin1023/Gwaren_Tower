@@ -5,6 +5,7 @@ function circleSafeName_(value) {
 function circleCategoryExports_(snapshot) {
  var t=snapshot.tables,posts=t.posts || [];
  var entries=[
+ ['잡담/메시지.json',t.chat_messages || []],
  ['회원/회원.json',t.members],['캐릭터/캐릭터.json',t.characters],
  ['게시판/공지.json',posts.filter(function(p){return p.category==='notice';})],
  ['게시판/썰.json',posts.filter(function(p){return p.category==='story';})],

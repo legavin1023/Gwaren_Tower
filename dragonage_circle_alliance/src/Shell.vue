@@ -35,7 +35,7 @@
         </button>
       </div>
       <p class="index-caption">
-        <span>INDEX OF RECORDS</span><span>I — IX</span>
+        <span>INDEX OF RECORDS</span><span>I — X</span>
       </p>
       <nav id="archive-index" class="side-nav" aria-label="주요 메뉴">
         <router-link
@@ -46,7 +46,7 @@
           @click="navigationOpen = false"
           ><CodexIcon :name="item.icon" /><span>{{ item.label }}</span
           ><small class="nav-index" aria-hidden="true">{{
-            ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"][index]
+            ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"][index]
           }}</small></router-link
         >
         <router-link
@@ -55,7 +55,7 @@
           class="nav-item"
           @click="navigationOpen = false"
           ><CodexIcon name="seal" /><span>운영 관리</span
-          ><small class="nav-index" aria-hidden="true">X</small></router-link
+          ><small class="nav-index" aria-hidden="true">XI</small></router-link
         >
       </nav>
       <AccountControls
@@ -525,6 +525,7 @@
             삭제되었거나 존재하지 않는 캐릭터입니다.
           </p></template
         >
+        <ChatView v-else-if="route.path === '/chat'" :me="viewMe" :members="members" :characters="characters" />
         <RoleplayView
           v-else-if="route.path.startsWith('/roleplay')"
           :me="viewMe"
@@ -958,6 +959,8 @@
                 캐릭터 사이의 관계를 제안하고 수락합니다. 서로 확인한 관계는
                 관계도와 목록에 표시됩니다.
               </dd>
+              <dt><router-link to="/chat">잡담</router-link></dt>
+              <dd>모든 회원이 함께 대화합니다. 접속 중인 회원과 입력 중 상태를 확인하고, 이전 대화를 다시 읽을 수 있습니다.</dd>
               <dt><router-link to="/board/story">▤ 썰 게시판</router-link></dt>
               <dd>
                 캐릭터의 이야기와 썰을 나눕니다. 여러 캐릭터를 태그하고 댓글로
@@ -1523,6 +1526,7 @@ import { characterTheme, portraitColor } from "./character-theme.mjs";
 import AccountControls from "./AccountControls.vue";
 import ImageSlider from "./ImageSlider.vue";
 import LogBoard from "./LogBoard.vue";
+const ChatView = defineAsyncComponent(() => import("./ChatView.vue"));
 import AffectionList from "./AffectionList.vue";
 import NotificationCenter from "./NotificationCenter.vue";
 import { notificationPath } from "./notificationRoutes.mjs";
@@ -1592,6 +1596,7 @@ const navigation = [
   { path: "/relationships", icon: "relation", label: "관계도" },
   { path: "/affection", icon: "affection", label: "호감도" },
   { path: "/roleplay", icon: "quill", label: "역극" },
+  { path: "/chat", icon: "chat", label: "잡담" },
   { path: "/board/story", icon: "book", label: "썰 게시판" },
   { path: "/board/art", icon: "image", label: "로그" },
   { path: "/board/notice", icon: "edict", label: "공지" },
